@@ -1,7 +1,11 @@
 """This script generates and analyzes overlap graphs of fasta files.
 """
+
+# pylint: disable=invalid-name
+
 from __future__ import with_statement, print_function, generators
 import argparse
+import csv
 import glob
 import os
 import sys
@@ -140,7 +144,7 @@ def get_read_classifications(prefix, bed_filename, merged_filename):
 
     ## get coordinates
     #coords = [int(a) for a in prefix.split('_')[-4:-2]]
-    remove_punctuation = lambda x : ''.join(e for e in x if e.isdigit() or e == '.')
+    remove_punctuation = lambda x: ''.join(e for e in x if e.isdigit() or e == '.')
     coords = [int(remove_punctuation(a)) for a in prefix.split('_')[1:]]
     #buff = int(prefix.split('_')[-1])
     midpoint = sum(coords) / 2.0
@@ -183,12 +187,12 @@ def node_community_colors(graph, communities):
     node_colors = [which_color(node) for node in graph.nodes()]
     return node_colors
 
-def node_set_colors(graph, spanset, gapset, preset, postset):
+def node_set_colors(nodes, spanset, gapset, preset, postset):
     """returns a list of colors for coloring nodes based
     on which set each node is in"""
 
     node_colors = []
-    for n in graph.nodes():
+    for n in nodes:
         if n in preset:
             node_colors.append(nx_helpers.rgb_to_hex((255, 0, 0)))
         elif n in postset:
@@ -317,6 +321,42 @@ def community_quality(graph, _prefix):
         print("Unexpected condition in finding community quality")
         return -1
 
+def make_line_plot():
+    """Makes an IGV-style drawing with colors"""
+
+    bed_filename = "data/all_files/chr4_124,017,492_124,029,032-refcoords.bed"
+    merged_filename = "data/all_files/chr4_124,017,492_124,029,032_merged.txt"
+    prefix = "chr4_124,017,492_124,029,032"
+
+    # Pull coords from bed file
+    coords = None # {name: (start, end)} for each read
+    with open(bed_filename, 'r') as csvfile:
+        bed_reader = csv.reader(csvfile, delimiter='\t')
+        coords = {row[3]: (int(row[1]), int(row[2])) for row in bed_reader}
+
+    ## normalize values to between 0 and 1
+    min_left_coord = min(x for x, _ in coords.values())
+    the_range = float(max(y for _, y in coords.values()) - min_left_coord)
+    coords = {read: (float(coord[0] - min_left_coord) / the_range,\
+                     float(coord[1] - min_left_coord) / the_range)\
+                     for read, coord in coords.iteritems()}
+
+    refset, altset, preset, postset = get_read_classifications(prefix, bed_filename, merged_filename)
+    colors = node_set_colors(coords.keys(), refset, altset, preset, postset)
+
+    y_value = .1
+    y_increment = (1. / float(len(coords))) - .2
+    for i, (read, coord) in enumerate(coords.iteritems()):
+        # format: plot([x1, x2], [y1, y2], color='k', linestyle='-', linewidth=2)
+
+        plt.plot(list(coord), [y_value, y_value], color=colors[i], linestyle='-')
+        y_value += y_increment
+
+    plt.axis('off')
+    filename = "lines.pdf"
+    plt.title(prefix)
+    plt.savefig(filename)
+
 def four_graphs(_dir):
     """
     Generates four graphs for each structural variant in the directory
@@ -354,7 +394,7 @@ def four_graphs(_dir):
         plt.subplot(2, 2, 1)
 
         ### DRAW NETWORK ###
-        node_colors = node_set_colors(graph, spanset, gapset, preset, postset)
+        node_colors = node_set_colors(graph.nodes(), spanset, gapset, preset, postset)
         pos = nx.spring_layout(graph)
         assert(len(node_colors) == len(graph.nodes()))
         title = "Chr {0}; L={1}; Ground Truth Colors\n\
@@ -373,7 +413,7 @@ def four_graphs(_dir):
         plt.subplot(2, 2, 2)
 
         ### DRAW NETWORK ###
-        node_colors = node_set_colors(graph, spanset, gapset, preset, postset)
+        node_colors = node_set_colors(graph.nodes(), spanset, gapset, preset, postset)
         #pos = nx.spring_layout(graph)
         assert(len(node_colors) == len(graph.nodes()))
         title = "Chr {0}; L={1}; Ground Truth Colors \n\
@@ -434,6 +474,7 @@ def sixteen_graphs(_dir):
         for min_matching_length in range(100, 1700, 100):
             print(min_matching_length)
             # used for ground truth
+            #_, _, preset, postset = get_read_classifications(prefix, bed_filename, merged_filename)
             _, _, preset, postset = get_read_classifications(prefix, bed_filename, merged_filename)
 
             # Generate and prune graph
@@ -463,7 +504,8 @@ if __name__ == '__main__':
     if args.type == "four":
         four_graphs(DIR)
     elif args.type == "sixteen":
-        sixteen_graphs(DIR)
+        make_line_plot()
+        #sixteen_graphs(DIR)
     else:
         print("Unknown command")
 

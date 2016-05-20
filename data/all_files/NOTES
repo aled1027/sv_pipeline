@@ -1,0 +1,3 @@
+scp 'xritza01+yldap@minerva.hpc.mssm.edu://sc/orga/scratch/bashia02/collaborations/anna_ritz/april_14_2016/merged_chr4*.txt' .
+
+

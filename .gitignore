@@ -1,0 +1,5 @@
+*.vim
+tags
+*.pyc
+temp
+

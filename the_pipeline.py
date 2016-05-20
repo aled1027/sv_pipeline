@@ -75,9 +75,9 @@ def read_paf(fasta_filename, min_matching_length, should_filter_paf=True):
     See minimap for more info on quality rating.
     """
 
-    paf_filename = "the_paf_file.paf"
-    minimap_command = """./minimap -Sw5 -L{} -m0 {} {} > {}"""\
-            .format(min_matching_length, fasta_filename, fasta_filename, paf_filename)
+    paf_filename = "tmp_paf_file.paf"
+    minimap_command = "./minimap -Sw5 -L{} -m0 {} {} > {}"\
+                      .format(min_matching_length, fasta_filename, fasta_filename, paf_filename)
     os.system(minimap_command)
 
     # populate alignedreads by reading in paf (filter if neccessary)

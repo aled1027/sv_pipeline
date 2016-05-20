@@ -9,11 +9,9 @@ import csv
 import glob
 import os
 import sys
-
 import matplotlib.pyplot as plt
 from pylab import rcParams
 import numpy as np
-
 import networkx as nx
 import networkx_helpers as nx_helpers
 import overlap
@@ -24,6 +22,30 @@ parser.add_argument("dir", help="Choose directory")
 
 ## Download the compressed file from this site and extract it:
 #https://xritza01.u.hpc.mssm.edu/trios/2016-05-12-data-for-networks/GR38/NA19240/dels/
+
+def find_shortest_paths(graph, out_filename, sources, targets, k_paths):
+    """ Use pathlinker to find shortest paths """
+    # TODO
+    assert(k_paths > 0)
+    edgelist_filename = out_filename + "edgelist.temp"
+    srctgt_filename = out_filename + "srctgt.temp"
+    nx.write_edgelist(graph, edgelist_filename)
+
+    with open(srctgt_filename, 'w') as f:
+        for node in graph.nodes():
+            if node in sources:
+                f.write(str(node) + '\tsource\n')
+            elif node in targets:
+                f.write(str(node) + '\ttarget\n')
+
+    s = "python PathLinker/PathLinker.py {} {} -o {} --write-paths --k-param={}"\
+            .format(edgelist_filename, srctgt_filename, out_filename, k_paths)
+    try:
+        os.system(s)
+        return read_paths(out_filename + "k_100-paths.txt")
+    except Exception as e:
+        print(e)
+        return []
 
 def draw_community_bar_chart(graph):
     """draw bar chart of size of communities"""
@@ -117,22 +139,6 @@ def pass_filters(line):
 
     return kept
 
-def get_read_lengths(prefix):
-    """Gets the lengths of the reads by pulling from the original .fa file.
-    """
-    # TODO
-    raise RuntimeError # deprecated --- needs updating
-    fafile = 'read_data/original_reads/%s.fa' % (prefix)
-    lengths = {}
-    name = ''
-    with open(fafile) as fin:
-        for line in fin:
-            if line[0] == '>':
-                name = line.strip()[1:]
-            else:
-                lengths[name] = len(line.strip())
-    return lengths
-
 def get_read_classifications(prefix, bed_filename, merged_filename):
     """Reads read classifications from disk and returns them.
     Used for "ground truth" of graph.
@@ -206,31 +212,6 @@ def node_set_colors(nodes, spanset, gapset, preset, postset):
             node_colors.append(nx_helpers.rgb_to_hex((0, 0, 0)))
     return node_colors
 
-def find_shortest_paths(graph, out_filename, sources, targets, k_paths):
-    """ Use pathlinker to find shortest paths """
-    # TODO
-    raise RuntimeError # this is probably broken
-    assert(k_paths > 0)
-    edgelist_filename = out_filename + "edgelist.temp"
-    srctgt_filename = out_filename + "srctgt.temp"
-    nx.write_edgelist(graph, edgelist_filename)
-
-    with open(srctgt_filename, 'w') as f:
-        for node in graph.nodes():
-            if node in sources:
-                f.write(str(node) + '\tsource\n')
-            elif node in targets:
-                f.write(str(node) + '\ttarget\n')
-
-    s = "python PathLinker/PathLinker.py {} {} -o {} --write-paths --k-param={}"\
-            .format(edgelist_filename, srctgt_filename, out_filename, k_paths)
-    try:
-        os.system(s)
-        return read_paths(out_filename + "k_100-paths.txt")
-    except Exception as e:
-        print(e)
-        return []
-
 def read_paths(filename):
     """Read data that pathlinker wrote.
     TODO update doc
@@ -273,26 +254,22 @@ def drop_small_communities(graph, communities, n=4):
     communities = [c for c in communities if len(c) >= n]
     return graph, communities
 
-def mapping_quality(graph, _prefix):
+def mapping_quality(graph, spanset, gapset):
     """Determines the quality of the mapping (assignment of edges)
     based on the "ground truth" of spanset and gapset.
     Sums up number of edges between spanset and gapset.
     Assumes undirected graph - see comments"""
-    spanset, gapset, _, _ = get_read_classifications(_prefix)
     the_sum = sum(sum(1 for edge in graph.edges(node) if edge[1] in gapset) for node in spanset)
-    # if directed graph, uncommen this:
+    # if directed graph, uncomment this:
     #the_sum += sum(sum(1 for edge in graph.edges(node) if edge[1] in spanset) for node in gapset)
     return the_sum
 
-def community_quality(graph, _prefix):
+def community_quality(communities, spanset, gapset):
     """Determines the quality of the communities based
     on the "ground truth" of spanset and gapset.
     First, determines which community corresponds to gapset and spanset.
     Then, returns number of wrong nodes.
     """
-    communities = nx_helpers.get_communities(graph)
-    spanset, gapset, _, _ = get_read_classifications(_prefix)
-
     if len(communities) != 2:
         print("not two communities")
         return -1
@@ -321,12 +298,8 @@ def community_quality(graph, _prefix):
         print("Unexpected condition in finding community quality")
         return -1
 
-def make_line_plot():
+def make_line_plot(bed_filename, the_sets):
     """Makes an IGV-style drawing with colors"""
-
-    bed_filename = "data/all_files/chr4_124,017,492_124,029,032-refcoords.bed"
-    merged_filename = "data/all_files/chr4_124,017,492_124,029,032_merged.txt"
-    prefix = "chr4_124,017,492_124,029,032"
 
     # Pull coords from bed file
     coords = None # {name: (start, end)} for each read
@@ -334,127 +307,99 @@ def make_line_plot():
         bed_reader = csv.reader(csvfile, delimiter='\t')
         coords = {row[3]: (int(row[1]), int(row[2])) for row in bed_reader}
 
-    ## normalize values to between 0 and 1
+    # normalize values to between 0 and 1
     min_left_coord = min(x for x, _ in coords.values())
     the_range = float(max(y for _, y in coords.values()) - min_left_coord)
     coords = {read: (float(coord[0] - min_left_coord) / the_range,\
                      float(coord[1] - min_left_coord) / the_range)\
                      for read, coord in coords.iteritems()}
 
-    refset, altset, preset, postset = get_read_classifications(prefix, bed_filename, merged_filename)
-    colors = node_set_colors(coords.keys(), refset, altset, preset, postset)
+    gapset, spanset, preset, postset = the_sets
+    colors = node_set_colors(coords.keys(), gapset, spanset, preset, postset)
 
-    y_value = .1
-    y_increment = (1. / float(len(coords))) - .2
-    for i, (read, coord) in enumerate(coords.iteritems()):
-        # format: plot([x1, x2], [y1, y2], color='k', linestyle='-', linewidth=2)
-
-        plt.plot(list(coord), [y_value, y_value], color=colors[i], linestyle='-')
-        y_value += y_increment
-
+    y_increment = (1. / float(len(coords)))
+    y_values = [float(i) * y_increment for i in range(0, len(coords))]
+    for i, (coord, y_value) in enumerate(zip(coords.values(), y_values)):
+        plt.plot(list(coord), [y_value, y_value], color=colors[i], linestyle='-', linewidth=1.5)
     plt.axis('off')
-    filename = "lines.pdf"
-    plt.title(prefix)
-    plt.savefig(filename)
+    plt.title("IGV style line plot")
 
-def four_graphs(_dir):
+def four_graphs(the_dir):
     """
     Generates four graphs for each structural variant in the directory
     formerly
     """
-    print('Looking in directory %s/*merged.txt' % (_dir))
-    files = glob.glob(_dir + '*merged.txt')
+    files = glob.glob(the_dir + '*merged.txt')
+    print('Looking in directory %s*merged.txt' % (the_dir))
     print('There are %d files' % (len(files)))
-    for infile in files:
+    for merged_filename in files:
 
-        # if there are fewer than threshold reads,
-        # then skip it.
+        # if there are fewer than threshold reads then skip it
         threshold = 25 # threshold before plotting.
-        if len(open(infile).readlines()) < threshold:
-            print('skipping %s' % (infile))
+        if len(open(merged_filename).readlines()) < threshold:
+            print('skipping %s' % (merged_filename))
             continue
-
-        _prefix = infile[:-11]
-        print(_prefix)
 
         rcParams['figure.figsize'] = 30, 30
         plt.clf()
         plt.figure(1)
 
+        prefix = merged_filename[len(the_dir):-11]
+        bed_filename = the_dir + prefix + '-refcoords.bed'
+        fasta_filename = the_dir + prefix + ".fa"
+
         min_matching_length = 100 # hard-code for now.
-
-        graph = generate_graph(_prefix, min_matching_length)
-
-
-        # squash preset and postset nodes
-        # used for ground truth
-        spanset, gapset, preset, postset = get_read_classifications(_prefix)
+        graph = generate_graph(fasta_filename, min_matching_length)
+        spanset, gapset, preset, postset = get_read_classifications(prefix,\
+                                                bed_filename, merged_filename)
 
         # Draw Ground Truth
         plt.subplot(2, 2, 1)
-
-        ### DRAW NETWORK ###
         node_colors = node_set_colors(graph.nodes(), spanset, gapset, preset, postset)
         pos = nx.spring_layout(graph)
         assert(len(node_colors) == len(graph.nodes()))
         title = "Chr {0}; L={1}; Ground Truth Colors\n\
                 Red=Preset, Yellow=Postset, Blue=GapSet, Green=SpanSet"\
-                .format(_prefix, min_matching_length)
+                .format(prefix, min_matching_length)
         nx.draw(graph, node_color=node_colors, node_size=100, pos=pos)
-       # nx.draw_networkx_labels(graph, pos, font_size=6)
         plt.title(title)
-
-        # squash preset and postset nodes
-        ## used for ground truth
-        graph = nx_helpers.remove_nodes(graph, preset)
-        graph = nx_helpers.remove_nodes(graph, postset)
 
         # Draw Ground Truth with squashed nodes
         plt.subplot(2, 2, 2)
-
-        ### DRAW NETWORK ###
+        # squash preset and postset nodes
+        graph = nx_helpers.remove_nodes(graph, preset)
+        graph = nx_helpers.remove_nodes(graph, postset)
         node_colors = node_set_colors(graph.nodes(), spanset, gapset, preset, postset)
         #pos = nx.spring_layout(graph)
         assert(len(node_colors) == len(graph.nodes()))
         title = "Chr {0}; L={1}; Ground Truth Colors \n\
                 Removed Preset and Postsetnodes; Blue=GapSet, Green=SpanSet"\
-                .format(_prefix, min_matching_length)
+                .format(prefix, min_matching_length)
         nx.draw(graph, node_color=node_colors, node_size=100, pos=pos)
-       # nx.draw_networkx_labels(graph, pos, font_size=6)
         plt.title(title)
-
-        # Draw Communities
-        plt.subplot(2, 2, 3)
-
-        communities = nx_helpers.get_communities(graph)
-        node_colors = node_community_colors(graph, communities)
-        assert(len(node_colors) == len(graph.nodes()))
-        title = "Chr {0}; L={1}; NumCom={2}, \nComQual={3}; MapQual={4}"\
-            .format(_prefix, min_matching_length, len(communities),\
-                    community_quality(graph, _prefix), mapping_quality(graph, _prefix))
-        nx.draw(graph, node_color=node_colors, node_size=100, pos=pos)
-        #nx.draw_networkx_labels(graph, pos, font_size=6)
-        plt.title(title)
-
 
         # Drop Small Communities and Draw
-        plt.subplot(2, 2, 4)
+        plt.subplot(2, 2, 3)
+        communities = nx_helpers.get_communities(graph)
         graph, communities = drop_small_communities(graph, communities)
         node_colors = node_community_colors(graph, communities)
-        #pos = nx.spring_layout(graph)
         assert(len(node_colors) == len(graph.nodes()))
-        title = "Chr {0}; L={1}; After Removing Small Communities; NumCom={2}, \n\
-                ComQual={3}; MapQual={4}"\
-                .format(_prefix, min_matching_length, len(communities),\
-                    community_quality(graph, _prefix), mapping_quality(graph, _prefix))
+        title = "Chr {0}; L={1}; After Removing Small Communities; NumCom={2}\n\
+                ComQual={3}, MapQual={4}"\
+                .format(prefix, min_matching_length, len(communities),\
+                        community_quality(communities, spanset, gapset),\
+                        mapping_quality(graph, spanset, gapset))
         nx.draw(graph, node_color=node_colors, node_size=100, pos=pos)
-        #nx.draw_networkx_labels(graph, pos, font_size=6)
         plt.title(title)
 
-        print("saving fig %s-communities.pdf" % (_prefix))
-        plt.savefig('%s-communities.pdf' % (_prefix))
+        # IGV Line Plot
+        plt.subplot(2, 2, 4)
+        make_line_plot(bed_filename, (spanset, gapset, preset, postset))
 
-def sixteen_graphs(_dir):
+        print("saving fig %s-communities.pdf" % (prefix))
+        plt.savefig('%s-communities.pdf' % (prefix))
+
+def sixteen_graphs(the_dir):
     """ generates graphs for each structual variant
     """
     rcParams['figure.figsize'] = 30, 30
@@ -462,21 +407,20 @@ def sixteen_graphs(_dir):
     plt.figure(1)
 
     # should look like: read_data/all_files/chr4_124,017,492_124,029,032_merged.txt
-    merged_files = glob.glob(_dir + '*merged.txt')
+    merged_files = glob.glob(the_dir + '*merged.txt')
     print("Running for {} regions".format(len(merged_files)))
     for merged_filename in merged_files:
         # get filenames
-        prefix = merged_filename[len(_dir):-11]
-        fasta_filename = _dir + prefix + ".fa"
-        bed_filename = _dir + prefix + "-refcoords.bed"
+        prefix = merged_filename[len(the_dir):-11]
+        fasta_filename = the_dir + prefix + ".fa"
+        bed_filename = the_dir + prefix + "-refcoords.bed"
         print('Using ' + prefix)
 
         for min_matching_length in range(100, 1700, 100):
             print(min_matching_length)
             # used for ground truth
-            #_, _, preset, postset = get_read_classifications(prefix, bed_filename, merged_filename)
-            _, _, preset, postset = get_read_classifications(prefix, bed_filename, merged_filename)
-
+            spanset, gapset, preset, postset = get_read_classifications(prefix,\
+                                                bed_filename, merged_filename)
             # Generate and prune graph
             graph = generate_graph(fasta_filename, min_matching_length)
             graph = nx_helpers.remove_nodes(graph, preset)
@@ -488,24 +432,26 @@ def sixteen_graphs(_dir):
             graph, communities = drop_small_communities(graph, communities)
             node_colors = node_community_colors(graph, communities)
             pos = nx.spring_layout(graph)
-            title = "Chr {0};\n L={1}; NumCom={2}"\
-                    .format(prefix, min_matching_length, len(communities))
+            title = "Chr {0};\n L={1}; NumCom={2}\nComQual = {3}, MapQual={4}"\
+                    .format(prefix, min_matching_length, len(communities),\
+                            community_quality(communities, spanset, gapset),\
+                            mapping_quality(graph, spanset, gapset))
             nx.draw(graph, node_color=node_colors, node_size=100, pos=pos)
             plt.title(title)
-        plt.savefig(_dir + prefix + '-communities.pdf')
+        plt.savefig(prefix + '-16-communities.pdf')
         plt.clf()
 
 if __name__ == '__main__':
     args = parser.parse_args()
     DIR = args.dir
     print('DIR = %s' % DIR)
+
     if DIR == '':
         sys.exit('ERROR: DIRECTORY with SV calls required.')
     if args.type == "four":
         four_graphs(DIR)
     elif args.type == "sixteen":
-        make_line_plot()
-        #sixteen_graphs(DIR)
+        sixteen_graphs(DIR)
     else:
         print("Unknown command")
 

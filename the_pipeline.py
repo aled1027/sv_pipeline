@@ -151,7 +151,8 @@ def get_read_classifications(prefix, bed_filename, merged_filename):
     ## get coordinates
     #coords = [int(a) for a in prefix.split('_')[-4:-2]]
     remove_punctuation = lambda x: ''.join(e for e in x if e.isdigit() or e == '.')
-    coords = [int(remove_punctuation(a)) for a in prefix.split('_')[1:]]
+    #coords = [int(remove_punctuation(a)) for a in prefix.split('_')[1:]]
+    coords = [int(remove_punctuation(a)) for a in prefix.split('_')[1:2]]
     #buff = int(prefix.split('_')[-1])
     midpoint = sum(coords) / 2.0
     bed_lines = get_ref_coords(bed_filename) # get the ref coordinates from BED file
@@ -341,12 +342,13 @@ def four_graphs(the_dir):
             continue
 
         rcParams['figure.figsize'] = 30, 30
-        plt.clf()
+        #plt.clf()
         plt.figure(1)
 
         prefix = merged_filename[len(the_dir):-11]
         bed_filename = the_dir + prefix + '-refcoords.bed'
         fasta_filename = the_dir + prefix + ".fa"
+        print(prefix)
 
         min_matching_length = 100 # hard-code for now.
         graph = generate_graph(fasta_filename, min_matching_length)
@@ -397,7 +399,7 @@ def four_graphs(the_dir):
         make_line_plot(bed_filename, (spanset, gapset, preset, postset))
 
         print("saving fig %s-communities.pdf" % (prefix))
-        plt.savefig('%s-communities.pdf' % (prefix))
+        plt.savefig(the_dir + '%s-communities.pdf' % (prefix))
 
 def sixteen_graphs(the_dir):
     """ generates graphs for each structual variant

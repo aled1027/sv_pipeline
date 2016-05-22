@@ -23,30 +23,6 @@ parser.add_argument("dir", help="Choose directory")
 ## Download the compressed file from this site and extract it:
 #https://xritza01.u.hpc.mssm.edu/trios/2016-05-12-data-for-networks/GR38/NA19240/dels/
 
-def find_shortest_paths(graph, out_filename, sources, targets, k_paths):
-    """ Use pathlinker to find shortest paths """
-    # TODO
-    assert(k_paths > 0)
-    edgelist_filename = out_filename + "edgelist.temp"
-    srctgt_filename = out_filename + "srctgt.temp"
-    nx.write_edgelist(graph, edgelist_filename)
-
-    with open(srctgt_filename, 'w') as f:
-        for node in graph.nodes():
-            if node in sources:
-                f.write(str(node) + '\tsource\n')
-            elif node in targets:
-                f.write(str(node) + '\ttarget\n')
-
-    s = "python PathLinker/PathLinker.py {} {} -o {} --write-paths --k-param={}"\
-            .format(edgelist_filename, srctgt_filename, out_filename, k_paths)
-    try:
-        os.system(s)
-        return read_paths(out_filename + "k_100-paths.txt")
-    except Exception as e:
-        print(e)
-        return []
-
 def draw_community_bar_chart(graph):
     """draw bar chart of size of communities"""
     communities = nx_helpers.get_communities(graph)

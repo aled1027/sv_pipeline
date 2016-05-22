@@ -4,6 +4,42 @@ from __future__ import with_statement, print_function, generators
 import community.detect as cd
 import networkx as nx
 
+def find_shortest_paths(graph, out_filename, sources, targets, k_paths):
+    """ Use pathlinker to find shortest paths
+
+    Args:
+        graph: a networkx graph
+        out_filename: file to print paths to (is a temporary file)
+        sources: a list of source nodes
+        targets: a list of target nodes
+        k_paths: number of shortest paths to find
+
+    Returns:
+        List of networkx graphs, which should be thought of as paths.
+        If sources are not connect to targets, then returns empty list.
+    """
+    assert(k_paths > 0)
+    edgelist_filename = out_filename + "edgelist.temp"
+    srctgt_filename = out_filename + "srctgt.temp"
+    nx.write_edgelist(graph, edgelist_filename)
+
+    with open(srctgt_filename, 'w') as f:
+        for node in graph.nodes():
+            if node in sources:
+                f.write(str(node) + '\tsource\n')
+            elif node in targets:
+                f.write(str(node) + '\ttarget\n')
+
+    s = "python PathLinker/PathLinker.py {} {} -o {} --write-paths --k-param={}"\
+            .format(edgelist_filename, srctgt_filename, out_filename, k_paths)
+    try:
+        os.system(s)
+        return read_paths(out_filename + "k_100-paths.txt")
+    except Exception as e:
+        print(e)
+        return []
+
+
 def get_adj_dict(graph):
     """ returns adjacency dictionary of graph
     """

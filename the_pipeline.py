@@ -8,6 +8,7 @@ import argparse
 import csv
 import glob
 from multiprocessing import Pool
+import pprint
 import os
 import sys
 import matplotlib.pyplot as plt
@@ -380,19 +381,31 @@ def four_graphs(the_dir):
     Generates four graphs for each structural variant in the directory
     formerly
     """
+
     files = glob.glob(the_dir + '*merged.txt')
 
-    # This region causes the community detection to hang; it doesn't converge?
-    try:
-        files.remove("/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/ambig_calls/14_22918113_22982906_buffer_10000_merged.txt")
-    except Exception as e:
-        print(e)
+    """
+    These regions causes problems
+    Zeroith path doesn't finish girvan newman community detection
+    Not sure about others
+    """
+    baddies = ["/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/ambig_calls/14_22918113_22982906_buffer_10000_merged.txt",
+               "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/homozygous_calls/14_105905509_105905510_buffer_10000_merged.txt",
+               "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/homozygous_calls/14_100811401_100811402_buffer_10000_merged.txt"]
+    for baddie in baddies:
+        print(baddie)
+        try:
+            files.remove(baddie)
+        except Exception as e:
+            print(e, baddie)
 
     print('Looking in directory %s*merged.txt' % (the_dir))
     print('There are %d files' % (len(files)))
 
     the_dirs = [the_dir for _ in files]
     zipped = zip(files, the_dirs)
+    #pprint.pprint(zipped)
+
     p = Pool()
     p.map(make_four_pdf, zipped)
 

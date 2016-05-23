@@ -1,7 +1,6 @@
 from __future__ import (absolute_import, division, print_function, unicode_literals)
 import copy
 import numpy as np
-from community.data import get_patent_adj
 
 class CommunityDetector(object):
     def __init__(self, adj_dict):

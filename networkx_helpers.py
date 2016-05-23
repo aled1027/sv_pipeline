@@ -1,8 +1,9 @@
 """Utilty functions for working with networkx"""
 
 from __future__ import with_statement, print_function, generators
-import community.detect as cd
 import networkx as nx
+import community_louvain as com_l
+import community_girvan_newman.detect as com_gn
 
 def find_shortest_paths(graph, out_filename, sources, targets, k_paths):
     """ Use pathlinker to find shortest paths
@@ -49,10 +50,30 @@ def get_adj_dict(graph):
     return ret_dict
 
 def get_communities(graph):
-    """ returns list of communities of graph
+    """returns list of communities"""
+    #return get_louv_communities(graph)
+    return get_gn_communities(graph)
+
+def get_louv_communities(graph):
+    """returns list of communities according to louvain algorithm"""
+    # "node: community" where community is an integer between 0 and len(com_dict) - 1
+    com_dict = com_l.best_partition(graph)
+
+    """convert com_dict to list format"""
+    num_communities = len(set(com_dict.values()))
+    com_list = [[] for _ in range(num_communities)]
+    for node, com in com_dict.iteritems():
+        com_list[com].append(node)
+    return com_list
+
+
+def get_gn_communities(graph):
+    """ returns list of communities according
+    to the girvan-newman algorithm
     """
+    print("Using gn communities")
     adj_dict = get_adj_dict(graph)
-    detector = cd.CommunityDetector(adj_dict)
+    detector = com_gn.CommunityDetector(adj_dict)
     return detector.run()
 
 def remove_nodes(graph, remove_set):

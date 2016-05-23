@@ -384,8 +384,7 @@ def four_graphs(the_dir):
 
     # This region causes the community detection to hang; it doesn't converge?
     try:
-        files.remove("/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/ambig_calls\
-                      /14_22918113_22982906_buffer_10000_merged.txt")
+        files.remove("/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/ambig_calls/14_22918113_22982906_buffer_10000_merged.txt")
     except Exception as e:
         print(e)
 

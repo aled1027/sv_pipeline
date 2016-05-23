@@ -51,8 +51,8 @@ def get_adj_dict(graph):
 
 def get_communities(graph):
     """returns list of communities"""
-    return get_louv_communities(graph)
-    #return get_gn_communities(graph)
+    return get_gn_communities(graph)
+    #return get_louv_communities(graph)
 
 def get_louv_communities(graph):
     """returns list of communities according to louvain algorithm"""

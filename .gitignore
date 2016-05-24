@@ -3,4 +3,5 @@ tags
 *.pyc
 temp
 *.paf
+.__afs*
 

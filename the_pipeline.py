@@ -129,8 +129,7 @@ def get_read_classifications(prefix, bed_filename, merged_filename):
     ## get coordinates
     #coords = [int(a) for a in prefix.split('_')[-4:-2]]
     remove_punctuation = lambda x: ''.join(e for e in x if e.isdigit() or e == '.')
-    #coords = [int(remove_punctuation(a)) for a in prefix.split('_')[1:]]
-    coords = [int(remove_punctuation(a)) for a in prefix.split('_')[1:2]]
+    coords = [int(remove_punctuation(a)) for a in prefix.split('_')[1:3]]
     #buff = int(prefix.split('_')[-1])
     midpoint = sum(coords) / 2.0
     bed_lines = get_ref_coords(bed_filename) # get the ref coordinates from BED file
@@ -326,7 +325,18 @@ def make_four_pdf(args):
     bed_filename = the_dir + prefix + '-refcoords.bed'
     fasta_filename = the_dir + prefix + ".fa"
 
-    min_matching_length = 100 # hard-code for now.
+    # Checks size of variant
+    remove_punctuation = lambda x: ''.join(e for e in x if e.isdigit() or e == '.')
+    coords = [int(remove_punctuation(a)) for a in prefix.split('_')[1:3]]
+    dist = coords[1] - coords[0]
+    if dist < 100:
+        print('skipping %s' % (merged_filename))
+        return
+
+
+
+
+    min_matching_length = 600 # hard-code for now.
     graph = generate_graph(prefix, fasta_filename, min_matching_length)
     spanset, gapset, preset, postset = get_read_classifications(prefix,\
                                             bed_filename, merged_filename)
@@ -387,11 +397,16 @@ def four_graphs(the_dir):
     """
     These regions causes problems
     Zeroith path doesn't finish girvan newman community detection
-    Not sure about others
+    Not sure about first and second
+    Third and fourth raise error in community detection: invalid value encountered in double scalars
+        According to stackoverflow, Nan might be returned from some function
     """
     baddies = ["/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/ambig_calls/14_22918113_22982906_buffer_10000_merged.txt",
                "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/homozygous_calls/14_105905509_105905510_buffer_10000_merged.txt",
-               "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/homozygous_calls/14_100811401_100811402_buffer_10000_merged.txt"]
+               "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/homozygous_calls/14_100811401_100811402_buffer_10000_merged.txt",
+               "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/heterozygous_hap1_calls/14_21805388_21805389_buffer_10000_merged.txt",
+               "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/heterozygous_hap1_calls/14_104363030_104363031_buffer_10000_merged.txt"]
+
     for baddie in baddies:
         print(baddie)
         try:
@@ -405,6 +420,10 @@ def four_graphs(the_dir):
     the_dirs = [the_dir for _ in files]
     zipped = zip(files, the_dirs)
     #pprint.pprint(zipped)
+
+    #for z in zipped:
+    #    print(z)
+    #    make_four_pdf(z)
 
     p = Pool()
     p.map(make_four_pdf, zipped)

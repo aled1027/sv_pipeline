@@ -40,7 +40,6 @@ def find_shortest_paths(graph, out_filename, sources, targets, k_paths):
         print(e)
         return []
 
-
 def get_adj_dict(graph):
     """ returns adjacency dictionary of graph
     """
@@ -65,7 +64,6 @@ def get_louv_communities(graph):
     for node, com in com_dict.iteritems():
         com_list[com].append(node)
     return com_list
-
 
 def get_gn_communities(graph):
     """ returns list of communities according

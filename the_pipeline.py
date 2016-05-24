@@ -302,7 +302,6 @@ def make_line_plot(bed_filename, the_sets):
     plt.axis('off')
     plt.title("IGV style line plot")
 
-
 def make_four_pdf(args):
     """
     Generates four graphs for the
@@ -386,21 +385,17 @@ def make_four_pdf(args):
 
     plt.savefig('%s-communities.pdf' % (prefix))
 
-def four_graphs(the_dir):
-    """
-    Generates four graphs for each structural variant in the directory
-    formerly
-    """
+def get_files(the_dir):
+    """Grabs all files from directory the_dir that
+    are of form '*merged.txt'"""
 
     files = glob.glob(the_dir + '*merged.txt')
 
-    """
-    These regions causes problems
-    Zeroith path doesn't finish girvan newman community detection
-    Not sure about first and second
-    Third and fourth raise error in community detection: invalid value encountered in double scalars
-        According to stackoverflow, Nan might be returned from some function
-    """
+    #These regions causes problems
+    #Zeroith path doesn't finish girvan newman community detection
+    #Not sure about first and second
+    #Third and fourth raise error in community detection: invalid value encountered in double scalars
+    #According to stackoverflow, Nan might be returned from some function
     baddies = ["/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/ambig_calls/14_22918113_22982906_buffer_10000_merged.txt",
                "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/homozygous_calls/14_105905509_105905510_buffer_10000_merged.txt",
                "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/homozygous_calls/14_100811401_100811402_buffer_10000_merged.txt",
@@ -413,18 +408,20 @@ def four_graphs(the_dir):
             files.remove(baddie)
         except Exception as e:
             print(e, baddie)
+    return files
 
+
+def four_graphs(the_dir):
+    """
+    Generates four graphs for each structural variant in the directory
+    formerly
+    """
+
+    files = get_files(the_dir)
     print('Looking in directory %s*merged.txt' % (the_dir))
     print('There are %d files' % (len(files)))
-
     the_dirs = [the_dir for _ in files]
     zipped = zip(files, the_dirs)
-    #pprint.pprint(zipped)
-
-    #for z in zipped:
-    #    print(z)
-    #    make_four_pdf(z)
-
     p = Pool()
     p.map(make_four_pdf, zipped)
 
@@ -481,6 +478,8 @@ if __name__ == '__main__':
         four_graphs(DIR)
     elif args.type == "sixteen":
         sixteen_graphs(DIR)
+    elif args.type == "simple":
+        simple(DIR)
     else:
         print("Unknown command")
 

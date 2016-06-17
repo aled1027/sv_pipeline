@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from pylab import rcParams
 import numpy as np
 import networkx as nx
+import collections
 
 from sv_pipeline import networkx_helpers as nx_helpers
 from sv_pipeline import overlap
@@ -22,6 +23,87 @@ from sv_pipeline import temp_dir
 
 ## Download the compressed file from this site and extract it:
 #https://xritza01.u.hpc.mssm.edu/trios/2016-05-12-data-for-networks/GR38/NA19240/dels/
+
+def classify_reads(the_dir, save_to_disk=True):
+    """For each "*_merged.m4" in directory the_dir, create a new file
+    *_merged.txt. The file is a space separated file with three columns.
+    Column 1 is the name of the base genome.
+    Column 2 is the name of the read.
+    Column 3 is an indicator of how the read aligns.
+    We use the following code:
+        b: the read aligns to both sequences equally well.
+        r: the read aligns to the reference sequence substantially better
+        a: the read aligns to the alternate sequence substantially better
+        TODO compare their margins
+        TODO we also, technically, don't need to write this data to disk.
+        We can keep it in memory and go from their: combine this function with get_read classifications.
+    """
+
+
+    print("in classify_reads")
+    m4_files = glob.glob(the_dir + '*merged.m4')
+
+
+    M4Data = collections.namedtuple('M4Data', ['queryid', 'refid', 'score', 'percent_good'])
+
+    for m4_file in m4_files:
+        print("looking at {}".format(m4_file))
+
+        """classifications maps a read to a classification; the primary
+        role of this function is to correctly populate the classifications dictionary
+
+        The temp_data_dict holds the information from the file, which we parse
+        as we loop over it below.
+        """
+
+        temp_data_dict = collections.defaultdict(list)
+        classifications = {} # maps a read to a classification
+
+        # populate data_dict with the information about each read
+        with open(m4_file, 'r') as csvfile:
+            m4_reader = csv.reader(csvfile, delimiter=' ')
+            for row in m4_reader:
+                queryid = row[0]
+                refid = row[1]
+                score = row[2]
+                percent_good = row[3]
+
+                m4data = M4Data(*row[0:4])
+                temp_data_dict[queryid].append(m4data)
+
+        for queryid, m4data_li in temp_data_dict.items():
+            if len(m4data_li) == 1:
+                # since the read only mapped to one sequence, use that sequence
+                the_class = 'a' if 'alt' in m4data_li[0].refid else 'r'
+                classifications[queryid] = (queryid, m4data_li[0].refid, the_class)
+
+            elif len(m4data_li) == 2:
+                # determine which is alt and which is ref
+                if 'alt' in m4data_li[0].refid:
+                    alt_m4data = m4data_li[0]
+                    ref_m4data = m4data_li[1]
+                else:
+                    alt_m4data = m4data_li[1]
+                    ref_m4data = m4data_li[0]
+
+                # compare alt and ref scores and classify accordingly
+                if alt_m4data.score == ref_m4data.score:
+                    classifications[queryid] = (queryid, m4data_li[0].refid, 'b')
+                elif alt_m4data.score < ref_m4data.score:
+                    classifications[queryid] = (queryid, m4data_li[0].refid, 'r')
+                else:
+                    classifications[queryid] = (queryid, m4data_li[0].refid, 'a')
+            else:
+                # TODO uncomment
+                #raise ValueError("There should only be two rows in the .m4 file {} for {}".format(m4_file, queryid))
+                pass
+
+        if save_to_disk:
+            # Write to the new _merged.txt
+            new_filename = m4_file[:-3] + ".txt"
+            with open(new_filename, 'w') as csvfile:
+                writer = csv.writer(csvfile, delimiter=' ')
+                writer.writerows(classifications.values())
 
 def draw_community_bar_chart(graph):
     """draw bar chart of size of communities"""

@@ -11,15 +11,19 @@ if __name__ == '__main__':
     DIR = args.dir
     print('DIR = %s' % DIR)
 
-    if DIR == '':
-        sys.exit('ERROR: DIRECTORY with SV calls required.')
-    if args.type == "four":
-        four_graphs(DIR)
-    elif args.type == "sixteen":
-        sixteen_graphs(DIR)
-    elif args.type == "simple":
-        simple(DIR)
-    else:
-        print("Unknown command")
+    classify_reads(DIR)
+
+
+
+    #if DIR == '':
+    #    sys.exit('ERROR: DIRECTORY with SV calls required.')
+    #if args.type == "four":
+    #    four_graphs(DIR)
+    #elif args.type == "sixteen":
+    #    sixteen_graphs(DIR)
+    #elif args.type == "simple":
+    #    simple(DIR)
+    #else:
+    #    print("Unknown command")
 
 

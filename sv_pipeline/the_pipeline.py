@@ -163,7 +163,7 @@ def make_four_pdf(args):
     min_matching_length = 600 # hard-code for now.
     graph = generate_graph(prefix, fasta_filename, min_matching_length)
     spanset, gapset, preset, postset = get_read_classifications(prefix,\
-                                            bed_filename, merged_filename)
+                                            bed_filename, merged_filename=merged_filename)
 
     # Draw Ground Truth
     plt.subplot(2, 2, 1)

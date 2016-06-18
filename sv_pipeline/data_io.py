@@ -136,179 +136,80 @@ def get_overlaps(lines):
             overlaps.append([lines[i][3], lines[j][3], ov])
     return overlaps, readleftcoords
 
-def old_get_read_classifications(prefix, bed_filename, merged_filename):
-    """Reads read classifications from disk and returns them.
-    Used for "ground truth" of graph.
-    """
-    warnings.warn("Is deprecated")
-    refset = set()
-    altset = set()
-    preset = set()
-    postset = set()
-
-    ## get coordinates
-    remove_punctuation = lambda x: ''.join(e for e in x if e.isdigit() or e == '.')
-    coords = [int(remove_punctuation(a)) for a in prefix.split('_')[1:3]]
-    midpoint = sum(coords) / 2.0
-    bed_lines = get_ref_coords(bed_filename) # get the ref coordinates from BED file
-    _, left_coords = get_overlaps(bed_lines)
-
-    with open(merged_filename, 'r') as fin:
-        for line in fin:
-            row = line.strip().split()
-            read = row[0]
-            if row[2] == 'b': # BOTH reference and alternate genomes
-                if left_coords[read] < midpoint: # Pre node
-                    preset.add(read)
-                else: # post node
-                    postset.add(read)
-            elif row[2] == 'a': # ALTERNATE genome only
-                altset.add(read)
-            elif row[2] == 'r': # REFERENCE genome only
-                refset.add(read)
-            else:
-                #print('ERROR:', row)
-                sys.exit()
-    return refset, altset, preset, postset
-
-
-
-def classify_reads(the_dir, save_to_disk=True):
-    """For each "*_merged.m4" in directory the_dir, create a new file
-    *_merged.txt. The file is a space separated file with three columns.
-    Column 1 is the name of the base genome.
-    Column 2 is the name of the read.
-    Column 3 is an indicator of how the read aligns.
-    We use the following code:
-        b: the read aligns to both sequences equally well.
-        r: the read aligns to the reference sequence substantially better
-        a: the read aligns to the alternate sequence substantially better
-        TODO compare their margins
-        TODO we also, technically, don't need to write this data to disk.
-        We can keep it in memory and go from their: combine this function with get_read classifications.
-    """
-
-    print("in classify_reads")
-    m4_files = glob.glob(the_dir + '*merged.m4')
-
-    M4Data = collections.namedtuple('M4Data', ['queryid', 'refid', 'score', 'percent_good'])
-
-    for m4_file in m4_files:
-        print("looking at {}".format(m4_file))
-
-        """classifications maps a read to a classification; the primary
-        role of this function is to correctly populate the classifications dictionary
-
-        The temp_data_dict holds the information from the file, which we parse
-        as we loop over it below.
-
-        returns refset, altset, preset, postset
-        """
-
-        temp_data_dict = collections.defaultdict(list)
-        classifications = {} # maps a read to a classification
-
-        # populate data_dict with the information about each read
-        with open(m4_file, 'r') as csvfile:
-            m4_reader = csv.reader(csvfile, delimiter=' ')
-            for row in m4_reader:
-                queryid = row[0]
-                refid = row[1]
-                score = row[2]
-                percent_good = row[3]
-
-                m4data = M4Data(*row[0:4])
-                temp_data_dict[queryid].append(m4data)
-
-        for queryid, m4data_li in temp_data_dict.items():
-            if len(m4data_li) == 1:
-                # since the read only mapped to one sequence, use that sequence
-                the_class = 'a' if 'alt' in m4data_li[0].refid else 'r'
-                classifications[queryid] = (queryid, m4data_li[0].refid, the_class)
-
-            elif len(m4data_li) == 2:
-                # determine which is alt and which is ref
-                if 'alt' in m4data_li[0].refid:
-                    alt_m4data = m4data_li[0]
-                    ref_m4data = m4data_li[1]
-                else:
-                    alt_m4data = m4data_li[1]
-                    ref_m4data = m4data_li[0]
-
-                # compare alt and ref scores and classify accordingly
-                if alt_m4data.score == ref_m4data.score:
-                    classifications[queryid] = (queryid, m4data_li[0].refid, 'b')
-                elif alt_m4data.score < ref_m4data.score:
-                    classifications[queryid] = (queryid, m4data_li[0].refid, 'r')
-                else:
-                    classifications[queryid] = (queryid, m4data_li[0].refid, 'a')
-            else:
-                raise ValueError("There should only be two rows in the .m4 file {} for {}".format(m4_file, queryid))
-
-def get_read_classifications(prefix, bed_filename, m4_filename):
+def get_read_classifications(prefix, bed_filename, m4_filename=None, merged_filename=None):
     """
     Returns the preset, postset, refset (aka spanset), altset (aka gapset)
     by reading data from bed_filename and the m4_filename
 
     TODO explain what refset, postset, gapset, etc. are
+
+    Either m4_filename or merged_filename must be given. If both are given,
+    we defer to using m4_filename
     """
-    warnings.warn("Untested function")
-    ## get coordinates
+
+    def parse_m4_file(_m4_filename):
+        warnings.warn("Untested function")
+        refset = set()
+        altset = set()
+        bothset = set()
+        with open(merged_filename, 'r') as fin:
+            for line in fin:
+                row = line.strip().split()
+                read = row[0]
+                if row[2] == 'b': # BOTH reference and alternate genomes
+                    bothset.add(read)
+                elif row[2] == 'a': # ALTERNATE genome only
+                    altset.add(read)
+                elif row[2] == 'r': # REFERENCE genome only
+                    refset.add(read)
+                else:
+                    raise ValueError("Unexpected value in column 2")
+        return bothset, refset, altset
+
+    def parse_merged_file(_merged_filename):
+        refset = set()
+        altset = set()
+        bothset = set()
+
+        MergedData = collections.namedtuple('MergedData', ['read', 'refid', 'set'])
+        temp_data_dict = collections.defaultdict(list)
+        with open(_merged_filename, 'r') as csvfile:
+            reader = csv.reader(csvfile, delimiter=' ')
+            datas = [MergedData(*row) for row in reader]
+            for data in datas:
+                if data.set == 'a':
+                    altset.add(data.read)
+                elif data.set == 'r':
+                    refset.add(data.read)
+                elif data.set == 'b':
+                    bothset.add(data.read)
+                else:
+                    raise ValueError("Unexpected value for set")
+        return bothset, refset, altset
+
+    if m4_filename:
+        bothset, refset, altset = parse_m4_file(m4_filename)
+    elif merged_filename:
+        bothset, refset, altset = parse_merged_file(merged_filename)
+    else:
+        raise ValueError("Either m4_filename or merged_filename must not be None")
+
+    # get coordinates by parsing bedfile
     remove_punctuation = lambda x: ''.join(e for e in x if e.isdigit() or e == '.')
     coords = [int(remove_punctuation(a)) for a in prefix.split('_')[1:3]]
     midpoint = sum(coords) / 2.0
     bed_lines = get_ref_coords(bed_filename) # get the ref coordinates from BED file
     _, left_coords = get_overlaps(bed_lines)
 
-    M4Data = collections.namedtuple('M4Data', ['queryid', 'refid', 'score', 'percent_good'])
-
-    refset = set()
-    altset = set()
+    # now loop over bothset to determine if a read belongs to preset or postset
     preset = set()
     postset = set()
-    temp_data_dict = collections.defaultdict(list)
-
-    with open(m4_file, 'r') as csvfile:
-        m4_reader = csv.reader(csvfile, delimiter=' ')
-        for row in m4_reader:
-            queryid = row[0]
-            refid = row[1]
-            score = row[2]
-            percent_good = row[3]
-
-            m4data = M4Data(*row[0:4])
-            temp_data_dict[queryid].append(m4data)
-
-        for queryid, m4data_li in temp_data_dict.items():
-            if len(m4data_li) == 1:
-                # since the read only mapped to one sequence, use that sequence
-                if 'alt' in m4data_li[0].refid:
-                    altset.add(m4data_li[0].queryid)
-                else:
-                    refset.add(m4data_li[0].queryid)
-            elif len(m4data_li) == 2:
-                # determine which is alt and which is ref
-                if 'alt' in m4data_li[0].refid:
-                    alt_m4data = m4data_li[0]
-                    ref_m4data = m4data_li[1]
-                else:
-                    alt_m4data = m4data_li[1]
-                    ref_m4data = m4data_li[0]
-
-                # compare alt and ref scores and classify accordingly
-                if alt_m4data.score == ref_m4data.score:
-                    # 'b'
-                elif alt_m4data.score < ref_m4data.score:
-                    # it's in the refset
-                    refset.add(ref_m4data.queryid)
-                else:
-                    # it's in the altset
-                    altset.add(alt_m4data.queryid)
-            else:
-                raise ValueError("There should only be two rows in the .m4 file {} for {}".format(m4_file, queryid))
-
-
-
+    for read in bothset:
+        if left_coords[read] < midpoint: # Pre node
+            preset.add(read)
+        else:
+            postset.add(read)
+    return preset, postset, refset, altset
 
 def get_files(the_dir):
     """Grabs all files from directory the_dir that

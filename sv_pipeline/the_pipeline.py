@@ -6,77 +6,17 @@
 from __future__ import with_statement, print_function, generators
 import glob
 from multiprocessing import Pool
-import pprint
 import os
-import sys
 import matplotlib.pyplot as plt
 from pylab import rcParams
 import numpy as np
 import networkx as nx
 
 from sv_pipeline import networkx_helpers as nx_helpers
-from sv_pipeline import overlap
 from sv_pipeline.data_io import *
-
 
 ## Download the compressed file from this site and extract it:
 #https://xritza01.u.hpc.mssm.edu/trios/2016-05-12-data-for-networks/GR38/NA19240/dels/
-
-def draw_community_bar_chart(graph):
-    """draw bar chart of size of communities"""
-    communities = nx_helpers.get_communities(graph)
-    len_communities = sorted([len(c) for c in communities])
-    plt.bar(np.arange(len(len_communities)), len_communities)
-
-
-def read_paf(prefix, fasta_filename, min_matching_length, should_filter_paf=True):
-    """ Reads the PAF file from minimap.  If should_filter_paf=True,
-    filters the file according to Ali's specs.
-    The returned list has three values.
-    The zerotih value is read0, first value is read1
-    and the third value is that quality of their mapping.
-    See minimap for more info on quality rating.
-    """
-
-    def pass_filters(line):
-        """returns True if the line passes Ali's filters, False otherwise.
-        From filename of previous file:
-        all_hg004.mapq200.alen3000.ovtol500
-        """
-        map_cutoff = 200
-        alen_cutoff = 3000
-        ov_tol = 500
-
-        kept = False
-        qname, ql, qs, qe, strand, tname, tl, ts, te, _, alen, mapq = line[0:12]
-        qs, qe, ql = int(qs), int(qe), int(ql)
-        ts, te, tl = int(ts), int(te), int(tl)
-        mapq = int(mapq)
-        alen = int(alen)
-        ov = overlap.overlap(qname, tname, mapq, -1, "+", qs, qe, ql, strand, ts, te, tl)
-        if mapq > map_cutoff and alen > alen_cutoff and ov.hasFullOverlap(ov_tol):
-            #print l.strip()
-            kept = True
-        else:
-            pass
-
-        return kept
-
-    # TODO put io parts in data_io.py
-
-    paf_filename = temp_dir + "/tmp_" + prefix + ".paf"
-    minimap_command = "./minimap -Sw5 -L{} -m0 {} {} > {}"\
-                      .format(min_matching_length, fasta_filename, fasta_filename, paf_filename)
-    os.system(minimap_command)
-
-    # populate alignedreads by reading in paf (filter if neccessary)
-    alignedreads = []
-    with open(paf_filename) as fin:
-        for line in fin:
-            row = line.strip().split()
-            if not should_filter_paf or pass_filters(row):
-                alignedreads.append([row[0], row[5], int(row[10])])
-    return alignedreads
 
 def node_community_colors(graph, communities):
     """runs a community detection algorithm on graph and
@@ -174,28 +114,12 @@ def community_quality(communities, spanset, gapset):
     elif spanset_i == 1:
         return spanset_1 + gapset_0
     else:
-        #print("Unexpected condition in finding community quality")
         return -1
 
 def make_line_plot(bed_filename, the_sets):
     """Makes an IGV-style drawing with colors"""
 
-    # TODO separate out this data grabbing into data_io, then make line plot in this function
-    import csv
-
-    # Pull coords from bed file
-    coords = None # {name: (start, end)} for each read
-    with open(bed_filename, 'r') as csvfile:
-        bed_reader = csv.reader(csvfile, delimiter='\t')
-        coords = {row[3]: (int(row[1]), int(row[2])) for row in bed_reader}
-
-    # normalize values to between 0 and 1
-    min_left_coord = min(x for x, _ in coords.values())
-    the_range = float(max(y for _, y in coords.values()) - min_left_coord)
-    coords = {read: (float(coord[0] - min_left_coord) / the_range,\
-                     float(coord[1] - min_left_coord) / the_range)\
-                     for read, coord in coords.items()}
-
+    coords = get_line_plot_coords(bed_filename)
     gapset, spanset, preset, postset = the_sets
     colors = node_set_colors(coords.keys(), gapset, spanset, preset, postset)
 
@@ -235,9 +159,6 @@ def make_four_pdf(args):
     if dist < 100:
         print('skipping %s' % (merged_filename))
         return
-
-
-
 
     min_matching_length = 600 # hard-code for now.
     graph = generate_graph(prefix, fasta_filename, min_matching_length)
@@ -290,20 +211,6 @@ def make_four_pdf(args):
 
     plt.savefig('figs/%s-communities.pdf' % (prefix))
 
-def four_graphs(the_dir):
-    """
-    Generates four graphs for each structural variant in the directory
-    formerly
-    """
-
-    files = get_files(the_dir)
-    print('Looking in directory %s*merged.txt' % (the_dir))
-    print('There are %d files' % (len(files)))
-    the_dirs = [the_dir for _ in files]
-    zipped = zip(files, the_dirs)
-    p = Pool()
-    p.map(make_four_pdf, zipped)
-
 def sixteen_graphs(the_dir):
     """ generates graphs for each structual variant
     """
@@ -346,4 +253,17 @@ def sixteen_graphs(the_dir):
         plt.savefig("figs/" + prefix + '-16-communities.pdf')
         plt.clf()
 
+def four_graphs(the_dir):
+    """
+    Generates four graphs for each structural variant in the directory
+    formerly
+    """
+
+    files = get_files(the_dir)
+    print('Looking in directory %s*merged.txt' % (the_dir))
+    print('There are %d files' % (len(files)))
+    the_dirs = [the_dir for _ in files]
+    zipped = zip(files, the_dirs)
+    p = Pool()
+    p.map(make_four_pdf, zipped)
 

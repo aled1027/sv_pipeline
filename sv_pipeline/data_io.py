@@ -3,13 +3,81 @@ import collections
 import csv
 import glob
 import os
+from itertools import tee
+import warnings
 
+from sv_pipeline import overlap
 from sv_pipeline import temp_dir
+
+def read_paf(prefix, fasta_filename, min_matching_length, should_filter_paf=True):
+    """ Reads the PAF file from minimap.  If should_filter_paf=True,
+    filters the file according to Ali's specs.
+    The returned list has three values.
+    The zerotih value is read0, first value is read1
+    and the third value is that quality of their mapping.
+    See minimap for more info on quality rating.
+    """
+
+    def pass_filters(row):
+        """returns True if the row passes Ali's filters, False otherwise.
+        From filename of previous file:
+        all_hg004.mapq200.alen3000.ovtol500
+        """
+        map_cutoff = 200
+        alen_cutoff = 3000
+        ov_tol = 500
+
+        kept = False
+        qname, ql, qs, qe, strand, tname, tl, ts, te, _, alen, mapq = row[0:12]
+        qs, qe, ql = int(qs), int(qe), int(ql)
+        ts, te, tl = int(ts), int(te), int(tl)
+        mapq = int(mapq)
+        alen = int(alen)
+        ov = overlap.overlap(qname, tname, mapq, -1, "+", qs, qe, ql, strand, ts, te, tl)
+        if mapq > map_cutoff and alen > alen_cutoff and ov.hasFullOverlap(ov_tol):
+            #print l.strip()
+            kept = True
+        else:
+            pass
+        return kept
+
+    paf_filename = temp_dir + "/tmp_" + prefix + ".paf"
+    minimap_command = "./minimap -Sw5 -L{} -m0 {} {} > {}"\
+                      .format(min_matching_length, fasta_filename, fasta_filename, paf_filename)
+    os.system(minimap_command)
+
+    # populate alignedreads by reading in paf (filter if neccessary)
+    alignedreads = []
+    with open(paf_filename) as fin:
+        for line in fin:
+            row = line.strip().split()
+            if not should_filter_paf or pass_filters(row):
+                alignedreads.append([row[0], row[5], int(row[10])])
+    return alignedreads
+
+def get_line_plot_coords(bed_filename):
+    """Pulls coordinates of reads from bed file
+    and returns a dictionary mapping a read to a tuple of starting coord, ending coord
+    which are normalized from 0 to 1"""
+    coords = None # {name: (start, end)} for each read
+    with open(bed_filename, 'r') as csvfile:
+        bed_reader = csv.reader(csvfile, delimiter='\t')
+        coords = {row[3]: (int(row[1]), int(row[2])) for row in bed_reader}
+
+    # normalize values to between 0 and 1
+    min_left_coord = min(x for x, _ in coords.values())
+    the_range = float(max(y for _, y in coords.values()) - min_left_coord)
+    coords = {read: (float(coord[0] - min_left_coord) / the_range,\
+                     float(coord[1] - min_left_coord) / the_range)\
+                     for read, coord in coords.items()}
+    return coords
 
 def get_ref_coords(bed_filename):
     """Given a bed_filename, looks up the refcoods.bed file
-    and parses it."""
+    and parses it.
 
+    TODO this and get_line_plot_coords might be the same function?
+    """
     lines = []
     with open(bed_filename) as fin:
         for line in fin:
@@ -21,19 +89,16 @@ def get_ref_coords(bed_filename):
     sorted(lines, key=lambda x: x[1])
     return lines
 
-
-
 def read_paths(filename):
-    """Read data that pathlinker wrote.
-    TODO update doc
-    Returns a bunch of subgraphs that consist of a single path
+    """Reads data that pathlinker wrote, which is a list of paths.
+    read_paths reads in the paths, transforms each path into a networkx graph,
+    and returns a list of the graphs.
     """
-    from itertools import tee, izip
     def pairwise(iterable):
         "s -> (s0,s1), (s1,s2), (s2, s3), ..."
         a, b = tee(iterable)
         next(b, None)
-        return izip(a, b)
+        return zip(a, b)
 
     paths = []
     with open(filename) as f:
@@ -71,20 +136,19 @@ def get_overlaps(lines):
             overlaps.append([lines[i][3], lines[j][3], ov])
     return overlaps, readleftcoords
 
-def get_read_classifications(prefix, bed_filename, merged_filename):
+def old_get_read_classifications(prefix, bed_filename, merged_filename):
     """Reads read classifications from disk and returns them.
     Used for "ground truth" of graph.
     """
+    warnings.warn("Is deprecated")
     refset = set()
     altset = set()
     preset = set()
     postset = set()
 
     ## get coordinates
-    #coords = [int(a) for a in prefix.split('_')[-4:-2]]
     remove_punctuation = lambda x: ''.join(e for e in x if e.isdigit() or e == '.')
     coords = [int(remove_punctuation(a)) for a in prefix.split('_')[1:3]]
-    #buff = int(prefix.split('_')[-1])
     midpoint = sum(coords) / 2.0
     bed_lines = get_ref_coords(bed_filename) # get the ref coordinates from BED file
     _, left_coords = get_overlaps(bed_lines)
@@ -124,10 +188,8 @@ def classify_reads(the_dir, save_to_disk=True):
         We can keep it in memory and go from their: combine this function with get_read classifications.
     """
 
-
     print("in classify_reads")
     m4_files = glob.glob(the_dir + '*merged.m4')
-
 
     M4Data = collections.namedtuple('M4Data', ['queryid', 'refid', 'score', 'percent_good'])
 
@@ -139,6 +201,8 @@ def classify_reads(the_dir, save_to_disk=True):
 
         The temp_data_dict holds the information from the file, which we parse
         as we loop over it below.
+
+        returns refset, altset, preset, postset
         """
 
         temp_data_dict = collections.defaultdict(list)
@@ -179,16 +243,72 @@ def classify_reads(the_dir, save_to_disk=True):
                 else:
                     classifications[queryid] = (queryid, m4data_li[0].refid, 'a')
             else:
-                # TODO uncomment
-                #raise ValueError("There should only be two rows in the .m4 file {} for {}".format(m4_file, queryid))
-                pass
+                raise ValueError("There should only be two rows in the .m4 file {} for {}".format(m4_file, queryid))
 
-        if save_to_disk:
-            # Write to the new _merged.txt
-            new_filename = m4_file[:-3] + ".txt"
-            with open(new_filename, 'w') as csvfile:
-                writer = csv.writer(csvfile, delimiter=' ')
-                writer.writerows(classifications.values())
+def get_read_classifications(prefix, bed_filename, m4_filename):
+    """
+    Returns the preset, postset, refset (aka spanset), altset (aka gapset)
+    by reading data from bed_filename and the m4_filename
+
+    TODO explain what refset, postset, gapset, etc. are
+    """
+    warnings.warn("Untested function")
+    ## get coordinates
+    remove_punctuation = lambda x: ''.join(e for e in x if e.isdigit() or e == '.')
+    coords = [int(remove_punctuation(a)) for a in prefix.split('_')[1:3]]
+    midpoint = sum(coords) / 2.0
+    bed_lines = get_ref_coords(bed_filename) # get the ref coordinates from BED file
+    _, left_coords = get_overlaps(bed_lines)
+
+    M4Data = collections.namedtuple('M4Data', ['queryid', 'refid', 'score', 'percent_good'])
+
+    refset = set()
+    altset = set()
+    preset = set()
+    postset = set()
+    temp_data_dict = collections.defaultdict(list)
+
+    with open(m4_file, 'r') as csvfile:
+        m4_reader = csv.reader(csvfile, delimiter=' ')
+        for row in m4_reader:
+            queryid = row[0]
+            refid = row[1]
+            score = row[2]
+            percent_good = row[3]
+
+            m4data = M4Data(*row[0:4])
+            temp_data_dict[queryid].append(m4data)
+
+        for queryid, m4data_li in temp_data_dict.items():
+            if len(m4data_li) == 1:
+                # since the read only mapped to one sequence, use that sequence
+                if 'alt' in m4data_li[0].refid:
+                    altset.add(m4data_li[0].queryid)
+                else:
+                    refset.add(m4data_li[0].queryid)
+            elif len(m4data_li) == 2:
+                # determine which is alt and which is ref
+                if 'alt' in m4data_li[0].refid:
+                    alt_m4data = m4data_li[0]
+                    ref_m4data = m4data_li[1]
+                else:
+                    alt_m4data = m4data_li[1]
+                    ref_m4data = m4data_li[0]
+
+                # compare alt and ref scores and classify accordingly
+                if alt_m4data.score == ref_m4data.score:
+                    # 'b'
+                elif alt_m4data.score < ref_m4data.score:
+                    # it's in the refset
+                    refset.add(ref_m4data.queryid)
+                else:
+                    # it's in the altset
+                    altset.add(alt_m4data.queryid)
+            else:
+                raise ValueError("There should only be two rows in the .m4 file {} for {}".format(m4_file, queryid))
+
+
+
 
 def get_files(the_dir):
     """Grabs all files from directory the_dir that

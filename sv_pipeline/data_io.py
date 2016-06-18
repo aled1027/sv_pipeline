@@ -55,7 +55,7 @@ def read_paf(prefix, fasta_filename, min_matching_length, should_filter_paf=True
                 alignedreads.append([row[0], row[5], int(row[10])])
     return alignedreads
 
-def get_line_plot_coords(bed_filename):
+def get_read_coordinates(bed_filename, normalize=False):
     """Pulls coordinates of reads from bed file
     and returns a dictionary mapping a read to a tuple of starting coord, ending coord
     which are normalized from 0 to 1"""
@@ -64,12 +64,14 @@ def get_line_plot_coords(bed_filename):
         bed_reader = csv.reader(csvfile, delimiter='\t')
         coords = {row[3]: (int(row[1]), int(row[2])) for row in bed_reader}
 
-    # normalize values to between 0 and 1
-    min_left_coord = min(x for x, _ in coords.values())
-    the_range = float(max(y for _, y in coords.values()) - min_left_coord)
-    coords = {read: (float(coord[0] - min_left_coord) / the_range,\
-                     float(coord[1] - min_left_coord) / the_range)\
-                     for read, coord in coords.items()}
+    if normalize:
+        # normalize values to between 0 and 1
+        min_left_coord = min(x for x, _ in coords.values())
+        the_range = float(max(y for _, y in coords.values()) - min_left_coord)
+        coords = {read: (float(coord[0] - min_left_coord) / the_range,\
+                         float(coord[1] - min_left_coord) / the_range)\
+                         for read, coord in coords.items()}
+
     return coords
 
 def get_ref_coords(bed_filename):
@@ -194,18 +196,18 @@ def get_read_classifications(prefix, bed_filename, m4_filename=None, merged_file
     else:
         raise ValueError("Either m4_filename or merged_filename must not be None")
 
-    # get coordinates by parsing bedfile
+    # compute midpoint
     remove_punctuation = lambda x: ''.join(e for e in x if e.isdigit() or e == '.')
     coords = [int(remove_punctuation(a)) for a in prefix.split('_')[1:3]]
     midpoint = sum(coords) / 2.0
-    bed_lines = get_ref_coords(bed_filename) # get the ref coordinates from BED file
-    _, left_coords = get_overlaps(bed_lines)
+
+    ref_coords = get_read_coordinates(bed_filename)
 
     # now loop over bothset to determine if a read belongs to preset or postset
     preset = set()
     postset = set()
     for read in bothset:
-        if left_coords[read] < midpoint: # Pre node
+        if ref_coords[read][0] < midpoint: # Pre node
             preset.add(read)
         else:
             postset.add(read)

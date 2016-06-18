@@ -119,7 +119,7 @@ def community_quality(communities, spanset, gapset):
 def make_line_plot(bed_filename, the_sets):
     """Makes an IGV-style drawing with colors"""
 
-    coords = get_line_plot_coords(bed_filename)
+    coords = get_read_coordinates(bed_filename, normalize=True)
     gapset, spanset, preset, postset = the_sets
     colors = node_set_colors(coords.keys(), gapset, spanset, preset, postset)
 
@@ -137,6 +137,7 @@ def make_four_pdf(args):
     """
     merged_filename = args[0]
     the_dir = args[1]
+    min_matching_length = args[2]
 
     # if there are fewer than threshold reads then skip it
     threshold = 25 # threshold before plotting.
@@ -160,9 +161,8 @@ def make_four_pdf(args):
         print('skipping %s' % (merged_filename))
         return
 
-    min_matching_length = 600 # hard-code for now.
     graph = generate_graph(prefix, fasta_filename, min_matching_length)
-    spanset, gapset, preset, postset = get_read_classifications(prefix,\
+    preset, postset, spanset, gapset = get_read_classifications(prefix,\
                                             bed_filename, merged_filename=merged_filename)
 
     # Draw Ground Truth
@@ -231,8 +231,8 @@ def sixteen_graphs(the_dir):
         for min_matching_length in range(100, 1700, 100):
             print(min_matching_length)
             # used for ground truth
-            spanset, gapset, preset, postset = get_read_classifications(prefix,\
-                                                bed_filename, merged_filename)
+            preset, postset, spanset, gapset = get_read_classifications(prefix,\
+                                                bed_filename, merged_filename=merged_filename)
             # Generate and prune graph
             graph = generate_graph(prefix, fasta_filename, min_matching_length)
             graph = nx_helpers.remove_nodes(graph, preset)
@@ -253,7 +253,7 @@ def sixteen_graphs(the_dir):
         plt.savefig("figs/" + prefix + '-16-communities.pdf')
         plt.clf()
 
-def four_graphs(the_dir):
+def four_graphs(the_dir, min_matching_length):
     """
     Generates four graphs for each structural variant in the directory
     formerly
@@ -263,7 +263,8 @@ def four_graphs(the_dir):
     print('Looking in directory %s*merged.txt' % (the_dir))
     print('There are %d files' % (len(files)))
     the_dirs = [the_dir for _ in files]
-    zipped = zip(files, the_dirs)
+    min_matching_lengths = [min_matching_length for _ in files]
+    zipped = zip(files, the_dirs, min_matching_lengths)
     p = Pool()
     p.map(make_four_pdf, zipped)
 

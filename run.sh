@@ -1,6 +1,9 @@
 #!/bin/bash
 
-python run.py four data/all_files/ figs/all.pdf --L 200
+rm figs/all.pdf;
+python run.py four data/ambig_calls/ figs/all.pdf --L 600
+
+#python run.py four data/all_files/ figs/all.pdf --L 200
 #python run.py sixteen data/all_files/ figs/all.pdf
 #python run.py classify data/ambig_calls/ figs/all.pdf
 

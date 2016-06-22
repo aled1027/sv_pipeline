@@ -3,6 +3,7 @@ import collections
 import csv
 import glob
 import os
+import sys
 from itertools import tee
 import warnings
 
@@ -150,22 +151,48 @@ def get_read_classifications(prefix, bed_filename, m4_filename=None, merged_file
     """
 
     def parse_m4_file(_m4_filename):
-        warnings.warn("Untested function")
         refset = set()
         altset = set()
         bothset = set()
-        with open(merged_filename, 'r') as fin:
-            for line in fin:
-                row = line.strip().split()
+
+        M4Data = collections.namedtuple('M4Data', ['read', 'refid', 'score', 'percent'])
+        with open(_m4_filename, 'r') as csvfile:
+            reader = csv.reader(csvfile, delimiter=' ')
+            data_dict = collections.defaultdict(list)
+            for row in reader:
                 read = row[0]
-                if row[2] == 'b': # BOTH reference and alternate genomes
-                    bothset.add(read)
-                elif row[2] == 'a': # ALTERNATE genome only
+                data_dict[read].append(M4Data(*row[0:4]))
+
+        for read, m4data_li in data_dict.items():
+            if len(m4data_li) == 1:
+                # since the read only mapped to one sequence, use that sequence
+                if 'alt' in m4data_li[0]:
                     altset.add(read)
-                elif row[2] == 'r': # REFERENCE genome only
+                else:
+                    refset.add(read)
+            elif len(m4data_li) == 2:
+                # determine which is alt and which is ref
+                if 'alt' in m4data_li[0].refid:
+                    alt_m4data = m4data_li[0]
+                    ref_m4data = m4data_li[1]
+                else:
+                    alt_m4data = m4data_li[1]
+                    ref_m4data = m4data_li[0]
+
+                if alt_m4data.score == ref_m4data.score:
+                    bothset.add(read)
+                elif alt_m4data.score < ref_m4data.score:
                     refset.add(read)
                 else:
-                    raise ValueError("Unexpected value in column 2")
+                    altset.add(read)
+            else:
+                # TODO remove try except, and just raise error
+                try:
+                    raise ValueError("There should only be two rows in the\
+                            .m4 file {} for {}".format(_m4_filename, read))
+                except ValueError:
+                    sys
+
         return bothset, refset, altset
 
     def parse_merged_file(_merged_filename):
@@ -174,7 +201,6 @@ def get_read_classifications(prefix, bed_filename, m4_filename=None, merged_file
         bothset = set()
 
         MergedData = collections.namedtuple('MergedData', ['read', 'refid', 'set'])
-        temp_data_dict = collections.defaultdict(list)
         with open(_merged_filename, 'r') as csvfile:
             reader = csv.reader(csvfile, delimiter=' ')
             datas = [MergedData(*row) for row in reader]
@@ -217,7 +243,7 @@ def get_files(the_dir):
     """Grabs all files from directory the_dir that
     are of form '*merged.txt'"""
 
-    files = glob.glob(the_dir + '*merged.txt')
+    files = glob.glob(the_dir + '*merged.m4')
 
     #These regions causes problems
     #Zeroith path doesn't finish girvan newman community detection
@@ -228,13 +254,15 @@ def get_files(the_dir):
                "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/homozygous_calls/14_105905509_105905510_buffer_10000_merged.txt",
                "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/homozygous_calls/14_100811401_100811402_buffer_10000_merged.txt",
                "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/heterozygous_hap1_calls/14_21805388_21805389_buffer_10000_merged.txt",
-               "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/heterozygous_hap1_calls/14_104363030_104363031_buffer_10000_merged.txt"]
+               "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/heterozygous_hap1_calls/14_104363030_104363031_buffer_10000_merged.txt",
+               "data/ambig_calls/14_22918113_22982906_buffer_10000_merged.m4"]
 
     for baddie in baddies:
         print(baddie)
         try:
             files.remove(baddie)
         except Exception as e:
+            sys.exc_info()[0]
             print(e, baddie)
     return files
 

@@ -85,7 +85,7 @@ def remove_nodes(graph, remove_set):
 
 def merge_nodes(graph, merge_set, new_node):
     """
-    Squahes all nodes in merge_set into a node called new_node
+    Squashes/merges all nodes in merge_set into a node called new_node
     Works for digraphs where all edges go in both directs,
     because that works best for PathLinker
     """

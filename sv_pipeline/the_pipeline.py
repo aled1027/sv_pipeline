@@ -135,21 +135,21 @@ def make_four_pdf(args):
     Generates four graphs for the
     structural variant defined by merged_filename
     """
-    merged_filename = args[0]
+    m4_filename = args[0]
     the_dir = args[1]
     min_matching_length = args[2]
 
     # if there are fewer than threshold reads then skip it
     threshold = 25 # threshold before plotting.
-    if len(open(merged_filename).readlines()) < threshold:
-        print('skipping %s' % (merged_filename))
+    if len(open(m4_filename).readlines()) < threshold:
+        print('skipping %s' % (m4_filename))
         return
 
     rcParams['figure.figsize'] = 30, 30
     plt.clf()
     plt.figure(1)
 
-    prefix = merged_filename[len(the_dir):-11]
+    prefix = m4_filename[len(the_dir):-10]
     bed_filename = the_dir + prefix + '-refcoords.bed'
     fasta_filename = the_dir + prefix + ".fa"
 
@@ -158,12 +158,14 @@ def make_four_pdf(args):
     coords = [int(remove_punctuation(a)) for a in prefix.split('_')[1:3]]
     dist = coords[1] - coords[0]
     if dist < 100:
-        print('skipping %s' % (merged_filename))
+        print('skipping %s' % (m4_filename))
         return
 
     graph = generate_graph(prefix, fasta_filename, min_matching_length)
+    #preset, postset, spanset, gapset = get_read_classifications(prefix,\
+    #                                        bed_filename, merged_filename=merged_filename)
     preset, postset, spanset, gapset = get_read_classifications(prefix,\
-                                            bed_filename, merged_filename=merged_filename)
+                                            bed_filename, m4_filename=m4_filename)
 
     # Draw Ground Truth
     plt.subplot(2, 2, 1)
@@ -260,11 +262,12 @@ def four_graphs(the_dir, min_matching_length):
     """
 
     files = get_files(the_dir)
-    print('Looking in directory %s*merged.txt' % (the_dir))
+    print('Looking in directory %s*merged.m4' % (the_dir))
     print('There are %d files' % (len(files)))
     the_dirs = [the_dir for _ in files]
     min_matching_lengths = [min_matching_length for _ in files]
     zipped = zip(files, the_dirs, min_matching_lengths)
     p = Pool()
     p.map(make_four_pdf, zipped)
+
 

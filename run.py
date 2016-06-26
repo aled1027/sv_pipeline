@@ -29,6 +29,9 @@ if __name__ == '__main__':
         classify_reads(DIR)
     else:
         print("Unknown command")
-    os.system("pdftk figs/*.pdf cat output {}".format(out_pdf))
+
+    # combine pdfs if the system has pdftk
+    if os.system("which pdftk") == 0:
+        os.system("pdftk figs/*.pdf cat output {}".format(out_pdf))
 
 

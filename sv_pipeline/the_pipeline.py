@@ -14,6 +14,7 @@ import networkx as nx
 
 from sv_pipeline import networkx_helpers as nx_helpers
 from sv_pipeline.data_io import *
+from sv_pipeline import smith_waterman
 
 ## Download the compressed file from this site and extract it:
 #https://xritza01.u.hpc.mssm.edu/trios/2016-05-12-data-for-networks/GR38/NA19240/dels/

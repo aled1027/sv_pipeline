@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from pylab import rcParams
 import numpy as np
 import networkx as nx
+import time
 
 from sv_pipeline import networkx_helpers as nx_helpers
 from sv_pipeline.data_io import *
@@ -46,9 +47,10 @@ def node_set_colors(nodes, spanset, gapset, preset, postset):
             node_colors.append(nx_helpers.rgb_to_hex((255, 0, 0)))
         elif n in postset:
             node_colors.append(nx_helpers.rgb_to_hex((255, 255, 0)))
-        elif n in gapset:
+        ## reads now may be missing the last set of numbers.  Account for this  in the node naming.
+        elif n in gapset or any([g for g in gapset if n in g]):
             node_colors.append(nx_helpers.rgb_to_hex((0, 10, 250)))
-        elif n in spanset:
+        elif n in spanset or any([s for s in spanset if n in s]):
             node_colors.append(nx_helpers.rgb_to_hex((0, 250, 10)))
         else:
             # uncategorized
@@ -138,29 +140,33 @@ def make_four_pdf(args):
     m4_filename = args[0]
     the_dir = args[1]
     min_matching_length = args[2]
-
+    
     # if there are fewer than threshold reads then skip it
     threshold = 25 # threshold before plotting.
     if len(open(m4_filename).readlines()) < threshold:
-        print('skipping %s' % (m4_filename))
+        print('skipping %s because it has %d lines' % (m4_filename,len(open(m4_filename).readlines())))
         return
 
     rcParams['figure.figsize'] = 30, 30
     plt.clf()
     plt.figure(1)
 
-    prefix = m4_filename[len(the_dir):-10]
+    ## TODO: split on period when new naming convention is adopted.
+    prefix = m4_filename[len(the_dir):-3]
     bed_filename = the_dir + prefix + '-refcoords.bed'
     fasta_filename = the_dir + prefix + ".fa"
 
     # Checks size of variant
+    
+    # for now, run all distances
+    mindist=0 # was originally 100
     remove_punctuation = lambda x: ''.join(e for e in x if e.isdigit() or e == '.')
     coords = [int(remove_punctuation(a)) for a in prefix.split('_')[1:3]]
     dist = coords[1] - coords[0]
-    if dist < 100:
-        print('skipping %s' % (m4_filename))
+    if dist < mindist:
+        print('skipping %s because variant size is %d' % (m4_filename,dist))
         return
-
+    
     graph = generate_graph(prefix, fasta_filename, min_matching_length)
     #preset, postset, spanset, gapset = get_read_classifications(prefix,\
     #                                        bed_filename, merged_filename=merged_filename)
@@ -212,6 +218,15 @@ def make_four_pdf(args):
     make_line_plot(bed_filename, (spanset, gapset, preset, postset))
 
     plt.savefig('figs/%s-communities.pdf' % (prefix))
+    print('%s\t%s\t%d\t%d\t%d\t%d\t%d\t%d\tchr%s_slop5000.png\t%s-communities.pdf' % (
+        prefix,
+        prefix.split('_')[0],
+        coords[0],coords[1],coords[1]-coords[0],
+        len(communities),
+        community_quality(communities, spanset, gapset),
+        mapping_quality(graph, spanset, gapset),
+        prefix,prefix))
+    return
 
 def sixteen_graphs(the_dir):
     """ generates graphs for each structual variant
@@ -260,14 +275,21 @@ def four_graphs(the_dir, min_matching_length):
     Generates four graphs for each structural variant in the directory
     formerly
     """
-
     files = get_files(the_dir)
-    print('Looking in directory %s*merged.m4' % (the_dir))
+    print('Looking in directory %s*.m4' % (the_dir))
     print('There are %d files' % (len(files)))
     the_dirs = [the_dir for _ in files]
     min_matching_lengths = [min_matching_length for _ in files]
     zipped = zip(files, the_dirs, min_matching_lengths)
+
+    ## print a header to screen: these values will be written at the end of the make_four_pdf()
+    ## function for each input.
+    print('prefix\tchr\tleftbp\trightbp\tdelsize\tnumcommunities\tcommunityquality\tmappingquality')
+    
     p = Pool()
     p.map(make_four_pdf, zipped)
+    p.close()
 
-
+    ## for testing purposes - only run one instance.
+    #make_four_pdf([files[0],the_dirs[0],min_matching_lengths[0]])
+    

@@ -7,6 +7,14 @@ Radhouane Aniba
 A Python implementation of the Smith-Waterman algorithm for local alignment
 of nucleotide sequences.
 
+Details:
+    - local alignment
+    - overlap (ignores starting and ending subsequences when necessary)
+    - constant gap penalty
+    - gap penalty = -1
+    - mismatch = -1
+    - match = 2
+
 These scores are taken from Wikipedia.
 en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm
 """
@@ -20,16 +28,15 @@ def align(seq1, seq2):
     cols = len(seq2) + 1
 
     # Initialize the scoring matrix.
-    score_matrix, start_pos = create_score_matrix(rows, cols)
+    score_matrix, start_pos = _create_score_matrix(rows, cols)
 
     # Traceback. Find the optimal path through the scoring matrix. This path
     # corresponds to the optimal local sequence alignment.
-    seq1_aligned, seq2_aligned = traceback(score_matrix, start_pos)
+    seq1_aligned, seq2_aligned = _traceback(score_matrix, start_pos)
 
     assert len(seq1_aligned) == len(seq2_aligned), 'aligned strings are not the same size'
 
-    #print_alignment(seq1_aligned, seq2_aligned)
-    print(quality(seq1_aligned, seq2_aligned))
+    _print_alignment(seq1_aligned, seq2_aligned)
 
 def _create_score_matrix(rows, cols):
     '''Create a matrix of scores representing trial alignments of the two sequences.
@@ -61,19 +68,19 @@ def _create_score_matrix(rows, cols):
     score_matrix = [[0 for col in range(cols)] for row in range(rows)]
 
     # Fill the scoring matrix.
+    # Keep left column and top row as 0s for overlap alignment.
     max_score = 0
-    max_pos   = None    # The row and columbn of the highest score in matrix.
+    max_pos = None # The row and columbn of the highest score in matrix.
     for i in range(1, rows):
         for j in range(1, cols):
             score = calc_score(score_matrix, i, j)
             if score > max_score:
                 max_score = score
-                max_pos   = (i, j)
+                max_pos = (i, j)
 
             score_matrix[i][j] = score
 
     assert max_pos is not None, 'the x, y position with the highest score was not found'
-
     return score_matrix, max_pos
 
 def _traceback(score_matrix, start_pos):
@@ -91,11 +98,26 @@ def _traceback(score_matrix, start_pos):
         left:     gap in sequence 2
     """
 
+    def _next_move(score_matrix, x, y):
+        diag = score_matrix[x - 1][y - 1]
+        up   = score_matrix[x - 1][y]
+        left = score_matrix[x][y - 1]
+
+        if diag >= up and diag >= left:     # Tie goes to the DIAG move.
+            return 1 if diag != 0 else 0    # 1 signals a DIAG move. 0 signals the end.
+        elif up > diag and up >= left:      # Tie goes to UP move.
+            return 2 if up != 0 else 0      # UP move or end.
+        elif left > diag and left > up:
+            return 3 if left != 0 else 0    # LEFT move or end.
+        else:
+            # Execution should not reach here.
+            raise ValueError('invalid move during traceback')
+
     END, DIAG, UP, LEFT = range(4)
     aligned_seq1 = []
     aligned_seq2 = []
-    x, y         = start_pos
-    move         = next_move(score_matrix, x, y)
+    x, y = start_pos
+    move = _next_move(score_matrix, x, y)
     while move != END:
         if move == DIAG:
             aligned_seq1.append(seq1[x - 1])
@@ -110,44 +132,17 @@ def _traceback(score_matrix, start_pos):
             aligned_seq1.append('-')
             aligned_seq2.append(seq2[y - 1])
             y -= 1
-
-        move = next_move(score_matrix, x, y)
+        move = _next_move(score_matrix, x, y)
 
     aligned_seq1.append(seq1[x - 1])
-    aligned_seq2.append(seq1[y - 1])
+    aligned_seq2.append(seq2[y - 1])
 
-    return ''.join(reversed(aligned_seq1)), ''.join(reversed(aligned_seq2))
+    ret = ''.join(reversed(aligned_seq1)), ''.join(reversed(aligned_seq2))
+    return ret
 
-
-def _next_move(score_matrix, x, y):
-    diag = score_matrix[x - 1][y - 1]
-    up   = score_matrix[x - 1][y]
-    left = score_matrix[x][y - 1]
-
-    if diag >= up and diag >= left:     # Tie goes to the DIAG move.
-        return 1 if diag != 0 else 0    # 1 signals a DIAG move. 0 signals the end.
-    elif up > diag and up >= left:      # Tie goes to UP move.
-        return 2 if up != 0 else 0      # UP move or end.
-    elif left > diag and left > up:
-        return 3 if left != 0 else 0    # LEFT move or end.
-    else:
-        # Execution should not reach here.
-        raise ValueError('invalid move during traceback')
-
-def _quality(seq1_aligned, seq2_aligned):
-    """
-    Returns a float between 0.0 and 1.0
-    indicating the quality of the alignment.
-
-    In particular, it gives the number of percentage of
-    identitical bases in the alignment
-    """
-    alignment_str, idents, gaps, mismatches = alignment_string(seq1_aligned, seq2_aligned)
-    alength = len(seq1_aligned)
-    return float(idents) / float(alength)
 
 def _print_alignment(seq1_aligned, seq2_aligned):
-    alignment_str, idents, gaps, mismatches = alignment_string(seq1_aligned, seq2_aligned)
+    alignment_str, idents, gaps, mismatches = _alignment_string(seq1_aligned, seq2_aligned)
     alength = len(seq1_aligned)
 
     print(' Identities = {0}/{1} ({2:.1%}), Gaps = {3}/{4} ({5:.1%})'
@@ -219,12 +214,12 @@ class ScoreMatrixTest(unittest.TestCase):
         rows = len(seq1) + 1
         cols = len(seq2) + 1
 
-        matrix_to_test, max_pos = create_score_matrix(rows, cols)
+        matrix_to_test, max_pos = _create_score_matrix(rows, cols)
         self.assertEqual(known_matrix, matrix_to_test)
 
 if __name__ == '__main__':
-    seq1 = "ATAGACGACATACAGACAGCATACAGACAGCATACAGA"
-    seq2 = "TTTAGCATGCGCATATCAGCAATACAGACAGATACG"
-    main(seq1, seq2)
+    #seq1 = "ATAGACGACATACAGACAGCATACAGACAGCATACAGA"
+    #seq2 = "TTTAGCATGCGCATATCAGCAATACAGACAGATACG"
+    #align(seq1, seq2)
 
-    #unittest.main()
+    unittest.main()

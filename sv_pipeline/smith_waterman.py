@@ -1,4 +1,3 @@
-
 """
 Taken from https://gist.github.com/radaniba/11019717
 Radhouane Aniba
@@ -19,26 +18,41 @@ These scores are taken from Wikipedia.
 en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm
 """
 
+from __future__ import print_function
 import unittest
 
 def align(seq1, seq2):
+    """
+    Align two sequences seq1 and seq2.
+
+    Args:
+        seq1 (string): first nucleotide sequence
+        seq2 (string): second nucleotide sequence
+
+    Returns:
+        seq1_aligned (string): the aligned first nucleotide sequence
+        seq2_aligned (string): the aligned second nucleotide sequence
+        score (int): the max value in the score matrix
+    """
     # The scoring matrix contains an extra row and column for the gap (-), hence
     # the +1 here.
     rows = len(seq1) + 1
     cols = len(seq2) + 1
 
     # Initialize the scoring matrix.
-    score_matrix, start_pos = _create_score_matrix(rows, cols)
+    score_matrix, start_pos = _create_score_matrix(rows, cols, seq1, seq2)
+    x, y = start_pos
+    score = score_matrix[x][y]
 
     # Traceback. Find the optimal path through the scoring matrix. This path
     # corresponds to the optimal local sequence alignment.
-    seq1_aligned, seq2_aligned = _traceback(score_matrix, start_pos)
+    seq1_aligned, seq2_aligned = _traceback(score_matrix, start_pos, seq1, seq2)
 
     assert len(seq1_aligned) == len(seq2_aligned), 'aligned strings are not the same size'
 
-    _print_alignment(seq1_aligned, seq2_aligned)
+    return seq1_aligned, seq2_aligned, score
 
-def _create_score_matrix(rows, cols):
+def _create_score_matrix(rows, cols, seq1, seq2):
     '''Create a matrix of scores representing trial alignments of the two sequences.
 
     Sequence alignment can be treated as a graph search problem. This function
@@ -60,12 +74,12 @@ def _create_score_matrix(rows, cols):
         similarity = match if seq1[x - 1] == seq2[y - 1] else mismatch
 
         diag_score = matrix[x - 1][y - 1] + similarity
-        up_score   = matrix[x - 1][y] + gap
+        up_score = matrix[x - 1][y] + gap
         left_score = matrix[x][y - 1] + gap
 
         return max(0, diag_score, up_score, left_score)
 
-    score_matrix = [[0 for col in range(cols)] for row in range(rows)]
+    score_matrix = [[0 for _ in range(cols)] for _ in range(rows)]
 
     # Fill the scoring matrix.
     # Keep left column and top row as 0s for overlap alignment.
@@ -83,7 +97,7 @@ def _create_score_matrix(rows, cols):
     assert max_pos is not None, 'the x, y position with the highest score was not found'
     return score_matrix, max_pos
 
-def _traceback(score_matrix, start_pos):
+def _traceback(score_matrix, start_pos, seq1, seq2):
     """Find the optimal path through the matrix.
 
     This function traces a path from the bottom-right to the top-left corner of
@@ -98,22 +112,24 @@ def _traceback(score_matrix, start_pos):
         left:     gap in sequence 2
     """
 
+    END, DIAG, UP, LEFT = range(4)
     def _next_move(score_matrix, x, y):
         diag = score_matrix[x - 1][y - 1]
-        up   = score_matrix[x - 1][y]
+        up = score_matrix[x - 1][y]
         left = score_matrix[x][y - 1]
 
-        if diag >= up and diag >= left:     # Tie goes to the DIAG move.
-            return 1 if diag != 0 else 0    # 1 signals a DIAG move. 0 signals the end.
-        elif up > diag and up >= left:      # Tie goes to UP move.
-            return 2 if up != 0 else 0      # UP move or end.
+        if diag >= up and diag >= left:          # Tie goes to the DIAG move.
+            return DIAG if diag != 0 else END    # 1 signals a DIAG move. 0 signals the end.
+
+        elif up > diag and up >= left:           # Tie goes to UP move.
+            return UP if up != 0 else END        # UP move or end.
+
         elif left > diag and left > up:
-            return 3 if left != 0 else 0    # LEFT move or end.
+            return LEFT if left != 0 else END    # LEFT move or end.
         else:
             # Execution should not reach here.
             raise ValueError('invalid move during traceback')
 
-    END, DIAG, UP, LEFT = range(4)
     aligned_seq1 = []
     aligned_seq2 = []
     x, y = start_pos
@@ -128,10 +144,12 @@ def _traceback(score_matrix, start_pos):
             aligned_seq1.append(seq1[x - 1])
             aligned_seq2.append('-')
             x -= 1
-        else:
+        elif move == LEFT:
             aligned_seq1.append('-')
             aligned_seq2.append(seq2[y - 1])
             y -= 1
+        else:
+            raise ValueError("Invalid move value")
         move = _next_move(score_matrix, x, y)
 
     aligned_seq1.append(seq1[x - 1])
@@ -145,15 +163,16 @@ def _print_alignment(seq1_aligned, seq2_aligned):
     alignment_str, idents, gaps, mismatches = _alignment_string(seq1_aligned, seq2_aligned)
     alength = len(seq1_aligned)
 
-    print(' Identities = {0}/{1} ({2:.1%}), Gaps = {3}/{4} ({5:.1%})'
+    print(' Identities = {0}/{1} ({2:.1%}), Gaps = {3}/{4} ({5:.1%}), mismatches = {6}'
           .format(idents,
                   alength,
                   idents / alength,
                   gaps,
                   alength,
-                  gaps / alength
+                  gaps / alength,
+                  mismatches
+                 )
          )
-    )
 
     for i in range(0, alength, 60):
         seq1_slice = seq1_aligned[i:i+60]
@@ -196,30 +215,53 @@ def _alignment_string(aligned_seq1, aligned_seq2):
 class ScoreMatrixTest(unittest.TestCase):
     '''Compare the matrix produced by create_score_matrix() with a known matrix.'''
     def test_matrix(self):
+        """
+        Tests that a score matrix is correct for a fairly simple case.
+        """
         # From Wikipedia (en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm)
         #                -   A   C   A   C   A   C   T   A
-        known_matrix = [[0,  0,  0,  0,  0,  0,  0,  0,  0],  # -
-                [0,  2,  1,  2,  1,  2,  1,  0,  2],  # A
-                [0,  1,  1,  1,  1,  1,  1,  0,  1],  # G
-                [0,  0,  3,  2,  3,  2,  3,  2,  1],  # C
-                [0,  2,  2,  5,  4,  5,  4,  3,  4],  # A
-                [0,  1,  4,  4,  7,  6,  7,  6,  5],  # C
-                [0,  2,  3,  6,  6,  9,  8,  7,  8],  # A
-                [0,  1,  4,  5,  8,  8, 11, 10,  9],  # C
-                [0,  2,  3,  6,  7, 10, 10, 10, 12]]  # A
+        known_matrix = [[0, 0, 0, 0, 0, 0, 0, 0, 0],     # -
+                        [0, 2, 1, 2, 1, 2, 1, 0, 2],     # A
+                        [0, 1, 1, 1, 1, 1, 1, 0, 1],     # G
+                        [0, 0, 3, 2, 3, 2, 3, 2, 1],     # C
+                        [0, 2, 2, 5, 4, 5, 4, 3, 4],     # A
+                        [0, 1, 4, 4, 7, 6, 7, 6, 5],     # C
+                        [0, 2, 3, 6, 6, 9, 8, 7, 8],     # A
+                        [0, 1, 4, 5, 8, 8, 11, 10, 9],  # C
+                        [0, 2, 3, 6, 7, 10, 10, 10, 12]]  # A
 
-        global seq1, seq2
+
         seq1 = 'AGCACACA'
         seq2 = 'ACACACTA'
         rows = len(seq1) + 1
         cols = len(seq2) + 1
 
-        matrix_to_test, max_pos = _create_score_matrix(rows, cols)
+        matrix_to_test, _ = _create_score_matrix(rows, cols, seq1, seq2)
         self.assertEqual(known_matrix, matrix_to_test)
 
-if __name__ == '__main__':
-    #seq1 = "ATAGACGACATACAGACAGCATACAGACAGCATACAGA"
-    #seq2 = "TTTAGCATGCGCATATCAGCAATACAGACAGATACG"
-    #align(seq1, seq2)
+def _weird_case():
+    """
+    A weird case where overlap alignment doesn't seem to work.
+    Debugged, but couldn't figure out the proper fix.
+    """
+    seq1 = "AAT"
+    seq2 = "AT"
 
-    unittest.main()
+    aligned1, aligned2, score = align(seq1, seq2)
+    _print_alignment(aligned1, aligned2)
+    print("score: {}".format(score))
+
+def _example():
+    """
+    A simple example on how to use the module.
+    """
+    seq1 = "ATAGACGACATACAGACAGCATACAGACAGCATACAGA"
+    seq2 = "TTTAGCATGCGCATATCAGCAATACAGACAGATACG"
+
+    aligned1, aligned2, score = align(seq1, seq2)
+    _print_alignment(aligned1, aligned2)
+    print("score: {}".format(score))
+
+if __name__ == '__main__':
+    _example()
+    #unittest.main()

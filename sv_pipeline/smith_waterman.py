@@ -23,7 +23,8 @@ import unittest
 
 def align(seq1, seq2):
     """
-    Align two sequences seq1 and seq2.
+    Align two sequences seq1 and seq2 with
+    Smith-Waterman, local, overlap alignment.
 
     Args:
         seq1 (string): first nucleotide sequence
@@ -33,6 +34,11 @@ def align(seq1, seq2):
         seq1_aligned (string): the aligned first nucleotide sequence
         seq2_aligned (string): the aligned second nucleotide sequence
         score (int): the max value in the score matrix
+
+    Examples:
+        >>> align("TAG", "GAG")
+        ('AG', 'AG', 4)
+
     """
     # The scoring matrix contains an extra row and column for the gap (-), hence
     # the +1 here.

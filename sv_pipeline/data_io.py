@@ -43,10 +43,11 @@ def read_paf(prefix, fasta_filename, min_matching_length, should_filter_paf=True
         return kept
 
     paf_filename = temp_dir + "/tmp_" + prefix + ".paf"
+    ## TODO: allow someone to pass a filepath for minimap.  
     minimap_command = "./minimap -Sw5 -L{} -m0 {} {} > {}"\
                       .format(min_matching_length, fasta_filename, fasta_filename, paf_filename)
-    os.system(minimap_command)
 
+    os.system(minimap_command)
     # populate alignedreads by reading in paf (filter if neccessary)
     alignedreads = []
     with open(paf_filename) as fin:
@@ -192,7 +193,7 @@ def get_read_classifications(prefix, bed_filename, m4_filename=None, merged_file
                             .m4 file {} for {}".format(_m4_filename, read))
                 except ValueError:
                     sys
-
+        #print(_m4_filename,len(bothset),len(refset),len(altset))
         return bothset, refset, altset
 
     def parse_merged_file(_merged_filename):
@@ -233,18 +234,31 @@ def get_read_classifications(prefix, bed_filename, m4_filename=None, merged_file
     preset = set()
     postset = set()
     for read in bothset:
+        ## Sometimes the read name looks like
+        ## m#####_####_#####_s1_p0/##/X_Y/X_Y
+        ## instead of
+        ## m#####_####_#####_s1_p0/##/X_Y
+        ## Try removing the last pair of numbers.
+        if read not in ref_coords:
+            read = '/'.join(read.split('/')[:-1])
+
         if ref_coords[read][0] < midpoint: # Pre node
             preset.add(read)
         else:
             postset.add(read)
+    #print(len(preset),len(postset),len(refset),len(altset))
     return preset, postset, refset, altset
 
 def get_files(the_dir):
     """Grabs all files from directory the_dir that
     are of form '*merged.txt'"""
 
-    files = glob.glob(the_dir + '*merged.m4')
+    ## Modified because the files are now renamed to simply be
+    ## chr:start-end.m4 rather than chr:start-end-merged.m4
+    #files = glob.glob(the_dir + '*merged.m4')
+    files = glob.glob(the_dir + '*.m4')
 
+    
     #These regions causes problems
     #Zeroith path doesn't finish girvan newman community detection
     #Not sure about first and second

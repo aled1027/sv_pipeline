@@ -22,8 +22,7 @@ from __future__ import print_function
 import unittest
 
 def align(seq1, seq2):
-    """
-    Align two sequences seq1 and seq2 with
+    """Aligns two sequences seq1 and seq2 with
     Smith-Waterman, local, overlap alignment.
 
     Args:
@@ -59,17 +58,16 @@ def align(seq1, seq2):
     return seq1_aligned, seq2_aligned, score
 
 def _create_score_matrix(rows, cols, seq1, seq2):
-    '''Create a matrix of scores representing trial alignments of the two sequences.
+    """Create a matrix of scores representing trial alignments of the two sequences.
 
     Sequence alignment can be treated as a graph search problem. This function
     creates a graph (2D matrix) of scores, which are based on trial alignments
     of different base pairs. The path with the highest cummulative score is the
     best alignment.
-    '''
+    """
 
     def calc_score(matrix, x, y):
-        """
-        Calculate score for a given x, y position in the scoring matrix.
+        """Calculate score for a given x, y position in the scoring matrix.
         The score is based on the up, left, and upper-left neighbors.
         """
 
@@ -219,10 +217,10 @@ def _alignment_string(aligned_seq1, aligned_seq2):
     return ''.join(alignment_string), idents, gaps, mismatches
 
 class ScoreMatrixTest(unittest.TestCase):
-    '''Compare the matrix produced by create_score_matrix() with a known matrix.'''
+    """Compare the matrix produced by create_score_matrix() with a known matrix.
+    """
     def test_matrix(self):
-        """
-        Tests that a score matrix is correct for a fairly simple case.
+        """Tests that a score matrix is correct for a fairly simple case.
         """
         # From Wikipedia (en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm)
         #                -   A   C   A   C   A   C   T   A
@@ -246,8 +244,7 @@ class ScoreMatrixTest(unittest.TestCase):
         self.assertEqual(known_matrix, matrix_to_test)
 
 def _weird_case():
-    """
-    A weird case where overlap alignment doesn't seem to work.
+    """A weird case where overlap alignment doesn't seem to work.
     Debugged, but couldn't figure out the proper fix.
     """
     seq1 = "AAT"
@@ -258,8 +255,7 @@ def _weird_case():
     print("score: {}".format(score))
 
 def _example():
-    """
-    A simple example on how to use the module.
+    """A simple example on how to use the module.
     """
     seq1 = "ATAGACGACATACAGACAGCATACAGACAGCATACAGA"
     seq2 = "TTTAGCATGCGCATATCAGCAATACAGACAGATACG"

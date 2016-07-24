@@ -93,7 +93,6 @@ def community_quality(communities, spanset, gapset):
     Then, returns number of wrong nodes.
     """
     if len(communities) != 2:
-        #print("not two communities")
         return -1
 
     com_sets = [set(c) for c in communities]
@@ -110,7 +109,7 @@ def community_quality(communities, spanset, gapset):
     gapset_i = 1 - np.argmax([gapset_0, gapset_1])
 
     if spanset_i == gapset_i:
-        #print("Error in finding community quality")
+        # Error in finding community quality
         return -1
     elif spanset_i == 0:
         return spanset_0 + gapset_1
@@ -141,7 +140,7 @@ def make_four_pdf(args):
     m4_filename = args[0]
     the_dir = args[1]
     min_matching_length = args[2]
-    
+
     # if there are fewer than threshold reads then skip it
     threshold = 25 # threshold before plotting.
     if len(open(m4_filename).readlines()) < threshold:
@@ -158,16 +157,11 @@ def make_four_pdf(args):
     fasta_filename = the_dir + prefix + ".fa"
 
     # Checks size of variant
-    
-    # for now, run all distances
-    mindist=0 # was originally 100
+
     remove_punctuation = lambda x: ''.join(e for e in x if e.isdigit() or e == '.')
     coords = [int(remove_punctuation(a)) for a in prefix.split('_')[1:3]]
     dist = coords[1] - coords[0]
-    if dist < mindist:
-        print('skipping %s because variant size is %d' % (m4_filename,dist))
-        return
-    
+
     graph = generate_graph(prefix, fasta_filename, min_matching_length)
     #preset, postset, spanset, gapset = get_read_classifications(prefix,\
     #                                        bed_filename, merged_filename=merged_filename)
@@ -219,15 +213,18 @@ def make_four_pdf(args):
     make_line_plot(bed_filename, (spanset, gapset, preset, postset))
 
     plt.savefig('figs/%s-communities.pdf' % (prefix))
-    print('%s\t%s\t%d\t%d\t%d\t%d\t%d\t%d\tchr%s_slop5000.png\t%s-communities.pdf' % (
+
+    ret_string = '%s\t%s\t%d\t%d\t%d\t%d\t%d\t%d\tchr%s_slop5000.png\t%s-communities.pdf' % (
         prefix,
         prefix.split('_')[0],
         coords[0],coords[1],coords[1]-coords[0],
         len(communities),
         community_quality(communities, spanset, gapset),
         mapping_quality(graph, spanset, gapset),
-        prefix,prefix))
-    return
+        prefix,prefix
+    )
+
+    return ret_string
 
 def sixteen_graphs(the_dir):
     """ generates graphs for each structual variant
@@ -285,12 +282,16 @@ def four_graphs(the_dir, min_matching_length):
 
     ## print a header to screen: these values will be written at the end of the make_four_pdf()
     ## function for each input.
-    print('prefix\tchr\tleftbp\trightbp\tdelsize\tnumcommunities\tcommunityquality\tmappingquality')
-    
+    header = 'prefix\tchr\tleftbp\trightbp\tdelsize\tnumcommunities\tcommunityquality\tmappingquality')
+
     p = Pool()
-    p.map(make_four_pdf, zipped)
+    results = p.map(make_four_pdf, zipped)
+    with open('results.txt', 'w') as results_file:
+        results_file.write(header + '\n')
+        results_file.write('\n'.join(results))
+        results_file.write('\n')
     p.close()
 
     ## for testing purposes - only run one instance.
     #make_four_pdf([files[0],the_dirs[0],min_matching_lengths[0]])
-    
+

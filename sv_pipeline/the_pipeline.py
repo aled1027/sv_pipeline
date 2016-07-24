@@ -282,7 +282,7 @@ def four_graphs(the_dir, min_matching_length):
 
     ## print a header to screen: these values will be written at the end of the make_four_pdf()
     ## function for each input.
-    header = 'prefix\tchr\tleftbp\trightbp\tdelsize\tnumcommunities\tcommunityquality\tmappingquality')
+    header = 'prefix\tchr\tleftbp\trightbp\tdelsize\tnumcommunities\tcommunityquality\tmappingquality'
 
     p = Pool()
     results = p.map(make_four_pdf, zipped)

@@ -12,6 +12,7 @@ from pylab import rcParams
 import numpy as np
 import networkx as nx
 import time
+import warnings
 
 from sv_pipeline import networkx_helpers as nx_helpers
 from sv_pipeline.data_io import *
@@ -58,9 +59,14 @@ def node_set_colors(nodes, spanset, gapset, preset, postset):
             node_colors.append(nx_helpers.rgb_to_hex((0, 0, 0)))
     return node_colors
 
-def generate_graph(prefix, fasta_filename, min_matching_length):
+def generate_graph(params):
     """generates and returns overlap graph from .paf files
     """
+
+    prefix = params['prefix']
+    fasta_filename = params['fasta_filename']
+    min_matching_length = params['min_matching_length']
+
     alignedreads = read_paf(prefix, fasta_filename, min_matching_length, should_filter_paf=True)
     aligned = [(t, h) for t, h, _ in alignedreads]
     graph = nx.Graph()
@@ -118,8 +124,9 @@ def community_quality(communities, spanset, gapset):
     else:
         return -1
 
-def make_line_plot(bed_filename, the_sets):
+def make_line_plot(the_sets, params):
     """Makes an IGV-style drawing with colors"""
+    bed_filename = params['bed_filename']
 
     coords = get_read_coordinates(bed_filename, normalize=True)
     gapset, spanset, preset, postset = the_sets
@@ -132,42 +139,53 @@ def make_line_plot(bed_filename, the_sets):
     plt.axis('off')
     plt.title("IGV style line plot")
 
+def make_four_params(args):
+    m4_filename = args[0]
+    the_dir = args[1]
+    prefix = m4_filename.split('/')[-1].split('.')[0]
+    bed_filename = the_dir + prefix + ".bed"
+    fasta_filename = the_dir + prefix + ".fa"
+
+    params = {
+        'dir': the_dir,
+        'min_matching_length': args[2],
+        'minimap_call': './minimap',
+        'prefix': prefix,
+        'm4_filename': m4_filename,
+        'bed_filename': bed_filename,
+        'fasta_filename': fasta_filename,
+    }
+    return params
+
 def make_four_pdf(args):
     """
     Generates four graphs for the
     structural variant defined by merged_filename
     """
-    m4_filename = args[0]
-    the_dir = args[1]
-    min_matching_length = args[2]
+    params = make_four_params(args)
+    m4_filename = params['m4_filename']
+    prefix = params['prefix']
+    min_matching_length = params['min_matching_length']
 
     # if there are fewer than threshold reads then skip it
     threshold = 25 # threshold before plotting.
     if len(open(m4_filename).readlines()) < threshold:
-        print('skipping %s because it has %d lines' % (m4_filename,len(open(m4_filename).readlines())))
+        print('skipping %s because it has %d lines' % (
+            m4_filename,
+            len(open(m4_filename).readlines()))
+        )
         return
 
     rcParams['figure.figsize'] = 30, 30
     plt.clf()
     plt.figure(1)
 
-    ## TODO: split on period when new naming convention is adopted.
-    prefix = m4_filename[len(the_dir):-3]
-    bed_filename = the_dir + prefix + '-refcoords.bed'
-    fasta_filename = the_dir + prefix + ".fa"
-
-    # Checks size of variant
-
     remove_punctuation = lambda x: ''.join(e for e in x if e.isdigit() or e == '.')
     coords = [int(remove_punctuation(a)) for a in prefix.split('_')[1:3]]
     dist = coords[1] - coords[0]
 
-    graph = generate_graph(prefix, fasta_filename, min_matching_length)
-    #preset, postset, spanset, gapset = get_read_classifications(prefix,\
-    #                                        bed_filename, merged_filename=merged_filename)
-    preset, postset, spanset, gapset = get_read_classifications(prefix,\
-                                            bed_filename, m4_filename=m4_filename)
-
+    graph = generate_graph(params)
+    preset, postset, spanset, gapset = get_read_classifications(params)
     # Draw Ground Truth
     plt.subplot(2, 2, 1)
     node_colors = node_set_colors(graph.nodes(), spanset, gapset, preset, postset)
@@ -210,7 +228,7 @@ def make_four_pdf(args):
 
     # IGV Line Plot
     plt.subplot(2, 2, 4)
-    make_line_plot(bed_filename, (spanset, gapset, preset, postset))
+    make_line_plot((spanset, gapset, preset, postset), params)
 
     plt.savefig('figs/%s-communities.pdf' % (prefix))
 
@@ -229,6 +247,9 @@ def make_four_pdf(args):
 def sixteen_graphs(the_dir):
     """ generates graphs for each structual variant
     """
+    # TODO change to deprecation warning
+    warnings.warn("Does not call sv_pipeline functoins correctly", DeprecationWarning)
+
     rcParams['figure.figsize'] = 30, 30
     plt.clf()
     plt.figure(1)
@@ -292,6 +313,7 @@ def four_graphs(the_dir, min_matching_length):
         results_file.write('\n')
     p.close()
 
-    ## for testing purposes - only run one instance.
-    #make_four_pdf([files[0],the_dirs[0],min_matching_lengths[0]])
+    # for testing purposes - only run one instance.
+    #for z in zipped:
+    #    make_four_pdf(z)
 

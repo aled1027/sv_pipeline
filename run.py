@@ -31,7 +31,7 @@ if __name__ == '__main__':
         print("Unknown command")
 
     # combine pdfs if the system has pdftk
-    if os.system("which pdftk") == 0:
-        os.system("pdftk figs/*.pdf cat output {}".format(out_pdf))
+    #if os.system("which pdftk") == 0:
+    #    os.system("pdftk figs/*.pdf cat output {}".format(out_pdf))
 
 

@@ -1,6 +1,5 @@
 #!/bin/bash
 
-rm figs/all.pdf;
 python run.py four data/ figs/all.pdf --L 600
 
 #rm figs/ambig.pdf

@@ -36,14 +36,13 @@ def read_paf(prefix, fasta_filename, min_matching_length, should_filter_paf=True
         alen = int(alen)
         ov = overlap.overlap(qname, tname, mapq, -1, "+", qs, qe, ql, strand, ts, te, tl)
         if mapq > map_cutoff and alen > alen_cutoff and ov.hasFullOverlap(ov_tol):
-            #print l.strip()
             kept = True
         else:
             pass
         return kept
 
     paf_filename = temp_dir + "/tmp_" + prefix + ".paf"
-    ## TODO: allow someone to pass a filepath for minimap.  
+    # TODO: allow someone to pass a filepath for minimap.
     minimap_command = "./minimap -Sw5 -L{} -m0 {} {} > {}"\
                       .format(min_matching_length, fasta_filename, fasta_filename, paf_filename)
 
@@ -140,7 +139,7 @@ def get_overlaps(lines):
             overlaps.append([lines[i][3], lines[j][3], ov])
     return overlaps, readleftcoords
 
-def get_read_classifications(prefix, bed_filename, m4_filename=None, merged_filename=None):
+def get_read_classifications(params):
     """
     Returns the preset, postset, refset (aka spanset), altset (aka gapset)
     by reading data from bed_filename and the m4_filename
@@ -150,6 +149,10 @@ def get_read_classifications(prefix, bed_filename, m4_filename=None, merged_file
     Either m4_filename or merged_filename must be given. If both are given,
     we defer to using m4_filename
     """
+    prefix = params['prefix']
+    m4_filename = params['m4_filename']
+    bed_filename = params['bed_filename']
+    merged_filename = None # TODO remove because deprecated
 
     def parse_m4_file(_m4_filename):
         refset = set()
@@ -193,7 +196,6 @@ def get_read_classifications(prefix, bed_filename, m4_filename=None, merged_file
                             .m4 file {} for {}".format(_m4_filename, read))
                 except ValueError:
                     sys
-        #print(_m4_filename,len(bothset),len(refset),len(altset))
         return bothset, refset, altset
 
     def parse_merged_file(_merged_filename):
@@ -246,38 +248,38 @@ def get_read_classifications(prefix, bed_filename, m4_filename=None, merged_file
             preset.add(read)
         else:
             postset.add(read)
-    #print(len(preset),len(postset),len(refset),len(altset))
     return preset, postset, refset, altset
 
 def get_files(the_dir):
     """Grabs all files from directory the_dir that
     are of form '*merged.txt'"""
 
-    ## Modified because the files are now renamed to simply be
-    ## chr:start-end.m4 rather than chr:start-end-merged.m4
+    # Modified because the files are now renamed to simply be
+    # chr:start-end.m4 rather than chr:start-end-merged.m4
     #files = glob.glob(the_dir + '*merged.m4')
     files = glob.glob(the_dir + '*.m4')
 
-    
     #These regions causes problems
     #Zeroith path doesn't finish girvan newman community detection
     #Not sure about first and second
     #Third and fourth raise error in community detection: invalid value encountered in double scalars
     #According to stackoverflow, Nan might be returned from some function
-    baddies = ["/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/ambig_calls/14_22918113_22982906_buffer_10000_merged.txt",
-               "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/homozygous_calls/14_105905509_105905510_buffer_10000_merged.txt",
-               "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/homozygous_calls/14_100811401_100811402_buffer_10000_merged.txt",
-               "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/heterozygous_hap1_calls/14_21805388_21805389_buffer_10000_merged.txt",
-               "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/heterozygous_hap1_calls/14_104363030_104363031_buffer_10000_merged.txt",
-               "data/ambig_calls/14_22918113_22982906_buffer_10000_merged.m4"]
 
-    for baddie in baddies:
-        print(baddie)
-        try:
-            files.remove(baddie)
-        except Exception as e:
-            sys.exc_info()[0]
-            print(e, baddie)
+    #baddies = ["/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/ambig_calls/14_22918113_22982906_buffer_10000_merged.txt",
+    #           "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/homozygous_calls/14_105905509_105905510_buffer_10000_merged.txt",
+    #           "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/homozygous_calls/14_100811401_100811402_buffer_10000_merged.txt",
+    #           "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/heterozygous_hap1_calls/14_21805388_21805389_buffer_10000_merged.txt",
+    #           "/data/mtsinai/2016_05_13_GR37_HG002_hapcalls/heterozygous_hap1_calls/14_104363030_104363031_buffer_10000_merged.txt",
+    #           "data/ambig_calls/14_22918113_22982906_buffer_10000_merged.m4"]
+
+    #for baddie in baddies:
+    #    print(baddie)
+    #    try:
+    #        files.remove(baddie)
+    #    except Exception as e:
+    #        sys.exc_info()[0]
+    #        print(e, baddie)
     return files
+
 
 

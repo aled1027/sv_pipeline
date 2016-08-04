@@ -19,7 +19,29 @@ en.wikipedia.org/wiki/Smith%E2%80%93Waterman_algorithm
 """
 
 from __future__ import print_function
+import sys
+import time
 import unittest
+from Bio import SeqIO, pairwise2
+
+class Timer:
+    """A helper class for timing
+
+    http://stackoverflow.com/questions/5849800/tic-toc-functions-analog-in-python
+    """
+    def __init__(self, name=None):
+        self.name = name
+
+    def __enter__(self):
+        self.tstart = time.time()
+        if self.name:
+            print('==> [Entering: %s]' % self.name)
+
+    def __exit__(self, type, value, traceback):
+        if self.name:
+            print('<== [Exiting : %s] ' % self.name, end='')
+        print('Elapsed: %s' % (time.time() - self.tstart))
+
 
 def align(seq1, seq2):
     """Aligns two sequences seq1 and seq2 with
@@ -216,6 +238,43 @@ def _alignment_string(aligned_seq1, aligned_seq2):
             mismatches += 1
     return ''.join(alignment_string), idents, gaps, mismatches
 
+def _fasta_dict(filename):
+    """Generates a dictionary mapping read name to sequence
+
+    SeqIO.parse returns an iterator to records,
+    where each record is a Bio.SeqIO.SeqRecord
+
+    # improve this -- can't grab all reads
+    """
+
+    with open(filename, 'r') as fasta_file:
+        ret_dict = {record.id: str(record.seq) \
+                for record in SeqIO.parse(fasta_file, "fasta")}
+    return ret_dict
+
+def get_alignment_scores(read_pairs, fasta_file):
+    """Returns a dictionary mapping a read_pair to its alignment score
+
+    fasta_file is path to fasta filename containing sequences
+    for the read_pairs
+
+    read_pairs should be a list of 2-tuples.
+    e.g. read_pairs = [(read0, read1), (read2, read3), ...]
+    """
+
+    fasta_dict = _fasta_dict(fasta_file)
+    score_dict = {}
+
+    for read0, read1 in read_pairs:
+        seq0 = fasta_dict[read0]
+        seq1 = fasta_dict[read1]
+        _, _, score = align(seq0, seq1)
+        score_dict[(read0, read1)] = score
+    return score_dict
+
+
+
+
 class ScoreMatrixTest(unittest.TestCase):
     """Compare the matrix produced by create_score_matrix() with a known matrix.
     """
@@ -243,27 +302,79 @@ class ScoreMatrixTest(unittest.TestCase):
         matrix_to_test, _ = _create_score_matrix(rows, cols, seq1, seq2)
         self.assertEqual(known_matrix, matrix_to_test)
 
-def _weird_case():
-    """A weird case where overlap alignment doesn't seem to work.
-    Debugged, but couldn't figure out the proper fix.
-    """
-    seq1 = "AAT"
-    seq2 = "AT"
+    def test_fasta(self):
+        pass
+        #overlaps = [('m150213_074729_42177R_c100777662550000001823160908051505_s1_p0/70715/9957_22166',
+        #'m150126_093705_42156_c100779662550000001823165208251525_s1_p0/144605/28461_40297')]
 
-    aligned1, aligned2, score = align(seq1, seq2)
-    _print_alignment(aligned1, aligned2)
-    print("score: {}".format(score))
+        #fasta_filename = 'example.fa'
+        #scores = get_alignment_scores(overlaps, fasta_filename)
+        #print(scores)
 
-def _example():
-    """A simple example on how to use the module.
-    """
-    seq1 = "ATAGACGACATACAGACAGCATACAGACAGCATACAGA"
-    seq2 = "TTTAGCATGCGCATATCAGCAATACAGACAGATACG"
 
-    aligned1, aligned2, score = align(seq1, seq2)
-    _print_alignment(aligned1, aligned2)
-    print("score: {}".format(score))
 
-if __name__ == '__main__':
-    _example()
-    #unittest.main()
+    def test_weird_case(self):
+        """A weird case where overlap alignment doesn't seem to work.
+        Debugged, but couldn't figure out the proper fix.
+        """
+        seq1 = "AAT"
+        seq2 = "AT"
+
+        aligned1, aligned2, score = align(seq1, seq2)
+        #_print_alignment(aligned1, aligned2)
+        #print("score: {}".format(score))
+
+    def test_normal_case(self):
+        """A simple example on how to use the module.
+        """
+        seq1 = "ATAGACGACATACAGACAGCATACAGACAGCATACAGA"
+        seq2 = "TTTAGCATGCGCATATCAGCAATACAGACAGATACG"
+
+        aligned1, aligned2, score = align(seq1, seq2)
+        #_print_alignment(aligned1, aligned2)
+        #print("score: {}".format(score))
+
+#if __name__ == '__main__':
+#    unittest.main()
+
+
+
+
+def their_align(x, y):
+    return pairwise2.align.localxx(x, y)
+
+
+
+def timing():
+    d = _fasta_dict('example.fa')
+    r0 = 'm150213_074729_42177R_c100777662550000001823160908051505_s1_p0/70715/9957_22166'
+    r1 = 'm150126_093705_42156_c100779662550000001823165208251525_s1_p0/144605/28461_40297'
+    seq0 = d[r0]
+    seq1 = d[r1]
+
+    for i in [100, 500, 1000]:
+        s0 = seq0[:i]
+        s1 = seq1[:i]
+        with Timer("align {}".format(i)):
+            align(s0, s1)
+
+timing()
+
+"""
+==> [Entering: their_align 100]
+<== [Exiting : their_align 100] Elapsed: 0.058339834213256836
+==> [Entering: their_align 500]
+<== [Exiting : their_align 500] Elapsed: 1.428382158279419
+==> [Entering: their_align 1000]
+<== [Exiting : their_align 1000] Elapsed: 8.796906471252441
+
+==> [Entering: align 100]
+<== [Exiting : align 100] Elapsed: 0.012089252471923828
+==> [Entering: align 500]
+<== [Exiting : align 500] Elapsed: 0.3024263381958008
+==> [Entering: align 1000]
+<== [Exiting : align 1000] Elapsed: 1.2689251899719238
+"""
+
+
+

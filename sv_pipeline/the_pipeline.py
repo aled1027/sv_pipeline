@@ -4,22 +4,117 @@
 # pylint: disable=invalid-name
 
 from __future__ import with_statement, print_function, generators
+import collections
 import glob
 from multiprocessing import Pool
 import os
+import time
+import warnings
+
 import matplotlib.pyplot as plt
 from pylab import rcParams
 import numpy as np
 import networkx as nx
-import time
-import warnings
 
 from sv_pipeline import networkx_helpers as nx_helpers
 from sv_pipeline.data_io import *
 from sv_pipeline import smith_waterman
+from sv_pipeline import utils # Timer
 
 ## Download the compressed file from this site and extract it:
 #https://xritza01.u.hpc.mssm.edu/trios/2016-05-12-data-for-networks/GR38/NA19240/dels/
+
+def smith_waterman_filter(graph, params):
+    fasta_filename = params['fasta_filename']
+    paf_filename = params['paf_filename']
+    score_threshold = params['gap_score_threshold']
+    fasta_dict = get_fasta_dict(fasta_filename)
+
+    # Parse PAF into a dictionary
+    paf_dict = {}
+    with open(paf_filename) as fin:
+        for line in fin:
+            row = line.strip().split()
+            query_name, _, query_start, query_end, _,\
+                    target_name, _, target_start, target_end, _, _, _ = row[0:12]
+
+            query_start = int(query_start)
+            query_end = int(query_end)
+            target_start = int(target_start)
+            target_end = int(target_end)
+            query_seq = fasta_dict[query_name][query_start:query_end]
+            target_seq = fasta_dict[target_name][target_start:target_end]
+
+            paf_dict[query_name+target_name] = {
+                    'query_name': query_name,
+                    'query_start': query_start,
+                    'query_end': query_end,
+                    'target_name': target_name,
+                    'target_start': target_start,
+                    'target_end': target_end,
+            }
+
+    print("starting for loop")
+    edges_to_remove = []
+    scores = []
+    num_bad_scores = 0
+    num_good_scores = 0
+    for query, target in nx.edges(graph):
+
+        # 1. Get overlap info from the paf dictionary
+        if str(query + target) in paf_dict:
+            # get the info
+            overlap_info = paf_dict[query+target]
+        elif str(target + query) in paf_dict:
+            # get info and swap them
+            overlap_info = paf_dict[target+query]
+            query, target = target, query
+        else:
+            overlap_info = None
+
+        query_start = overlap_info['query_start']
+        query_end = overlap_info['query_end']
+        target_start = overlap_info['target_start']
+        target_end = overlap_info['target_end']
+
+        query_seq = fasta_dict[query][query_start:query_end]
+        target_seq = fasta_dict[target][target_start:target_end]
+
+        # 2. Align the sequences using the rolling method
+        bad_score = False
+        step_size = 2000
+        min_len = min(len(query_seq), len(target_seq))
+        for start, end in utils.pairwise(range(0, min_len, step_size)):
+            qs = query_seq[start:end]
+            ts = target_seq[start:end]
+            score = smith_waterman.smith_waterman(qs, ts)
+
+            # 3. Delete edge if score is too bad
+            scores.append(score)
+
+            if score > score_threshold:
+                bad_score = True
+                break
+
+        # Do something based on the scores
+        if bad_score:
+            edges_to_remove.append((query, target))
+            num_bad_scores += 1
+        else:
+            num_good_scores += 1
+
+    # remove bad edges
+    graph.remove_edges_from(edges_to_remove)
+
+    # remove isolated nodes
+    isolates = list(nx.isolates(graph))
+    graph.remove_nodes_from(isolates)
+
+    # the histogram of the data
+    plt.hist(scores)
+    plt.title("histogram of num_gaps / len(aligned_sequence)\n{} bad_scores {} good_scores\nthreshold = {}"
+              .format(num_bad_scores, num_good_scores, score_threshold))
+    return graph
 
 def node_community_colors(graph, communities):
     """runs a community detection algorithm on graph and
@@ -63,11 +158,8 @@ def generate_graph(params):
     """generates and returns overlap graph from .paf files
     """
 
-    prefix = params['prefix']
-    fasta_filename = params['fasta_filename']
-    min_matching_length = params['min_matching_length']
+    alignedreads = read_paf(params, should_filter_paf=True)
 
-    alignedreads = read_paf(prefix, fasta_filename, min_matching_length, should_filter_paf=True)
     aligned = [(t, h) for t, h, _ in alignedreads]
     graph = nx.Graph()
     graph.add_edges_from(aligned)
@@ -154,6 +246,8 @@ def make_four_params(args):
         'm4_filename': m4_filename,
         'bed_filename': bed_filename,
         'fasta_filename': fasta_filename,
+        'paf_filename': temp_dir + "/tmp_" + prefix + ".paf",
+        'gap_score_threshold': 0.12,
     }
     return params
 
@@ -187,7 +281,7 @@ def make_four_pdf(args):
     graph = generate_graph(params)
     preset, postset, spanset, gapset = get_read_classifications(params)
     # Draw Ground Truth
-    plt.subplot(2, 2, 1)
+    plt.subplot(2, 3, 1)
     node_colors = node_set_colors(graph.nodes(), spanset, gapset, preset, postset)
     pos = nx.spring_layout(graph)
 
@@ -195,25 +289,34 @@ def make_four_pdf(args):
     title = "Chr {0}; L={1}; Ground Truth Colors\n\
             Red=Preset, Yellow=Postset, Blue=GapSet, Green=SpanSet"\
             .format(prefix, min_matching_length)
-    nx.draw(graph, node_color=node_colors, node_size=100, pos=pos)
+    nx.draw_spring(graph, node_color=node_colors, node_size=100)
+    #nx.draw(graph, node_color=node_colors, node_size=100, pos=pos)
     plt.title(title)
 
-    # Draw Ground Truth with squashed nodes
-    plt.subplot(2, 2, 2)
+    # Draw histogram of smith waterman scores and remove bad edges
+    plt.subplot(2, 3, 2)
+
     # squash preset and postset nodes
     graph = nx_helpers.remove_nodes(graph, preset)
     graph = nx_helpers.remove_nodes(graph, postset)
+
+    # filter nodes by smith_waterman
+    with utils.Timer("smith_waterman_filter"):
+        graph = smith_waterman_filter(graph, params)
+
+    # Draw groudn truth with squashed nodes
+    plt.subplot(2, 3, 3)
     node_colors = node_set_colors(graph.nodes(), spanset, gapset, preset, postset)
-    #pos = nx.spring_layout(graph)
     assert(len(node_colors) == nx.number_of_nodes(graph))
     title = "Chr {0}; L={1}; Ground Truth Colors \n\
             Removed Preset and Postsetnodes; Blue=GapSet, Green=SpanSet"\
             .format(prefix, min_matching_length)
-    nx.draw(graph, node_color=node_colors, node_size=100, pos=pos)
+    nx.draw_spring(graph, node_color=node_colors, node_size=100)
+    #nx.draw(graph, node_color=node_colors, node_size=100, pos=pos)
     plt.title(title)
 
     # Drop Small Communities and Draw
-    plt.subplot(2, 2, 3)
+    plt.subplot(2, 3, 4)
     communities = nx_helpers.get_communities(graph)
     graph, communities = drop_small_communities(graph, communities)
     node_colors = node_community_colors(graph, communities)
@@ -223,11 +326,12 @@ def make_four_pdf(args):
             .format(prefix, min_matching_length, len(communities),\
                     community_quality(communities, spanset, gapset),\
                     mapping_quality(graph, spanset, gapset))
-    nx.draw(graph, node_color=node_colors, node_size=100, pos=pos)
+    #nx.draw(graph, node_color=node_colors, node_size=100, pos=pos)
+    nx.draw_spring(graph, node_color=node_colors, node_size=100)
     plt.title(title)
 
     # IGV Line Plot
-    plt.subplot(2, 2, 4)
+    plt.subplot(2, 3, 5)
     make_line_plot((spanset, gapset, preset, postset), params)
 
     plt.savefig('figs/%s-communities.pdf' % (prefix))
@@ -305,12 +409,19 @@ def four_graphs(the_dir, min_matching_length):
     ## function for each input.
     header = 'prefix\tchr\tleftbp\trightbp\tdelsize\tnumcommunities\tcommunityquality\tmappingquality'
 
-    p = Pool()
-    results = p.map(make_four_pdf, zipped)
+    # TODO uncomment this to make parallel
+    #p = Pool()
+    #results = p.map(make_four_pdf, zipped)
+
+    # Comment this to make sychronous
+    with utils.Timer("timing this shit"):
+        results = [make_four_pdf(z) for z in zipped]
+
     with open('results.txt', 'w') as results_file:
         results_file.write(header + '\n')
         results_file.write('\n'.join(results))
         results_file.write('\n')
+
     p.close()
 
     # for testing purposes - only run one instance.

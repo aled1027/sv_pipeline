@@ -7,19 +7,48 @@ import sys
 from itertools import tee
 import warnings
 
+from Bio import SeqIO
+
 from sv_pipeline import overlap
 from sv_pipeline import temp_dir
+from sv_pipeline import smith_waterman
+from pprint import pprint
 
-def read_paf(prefix, fasta_filename, min_matching_length, should_filter_paf=True):
+def get_fasta_dict(filename):
+    """Generates a dictionary mapping read name to sequence
+
+    SeqIO.parse returns an iterator to records,
+    where each record is a Bio.SeqIO.SeqRecord
+
+    Args:
+        filename (string): The path of fasta file.
+    Returns
+        Dictionary: Maps read names to their string
+    """
+
+    with open(filename, 'r') as fasta_file:
+        ret_dict = {record.id: str(record.seq) \
+                for record in SeqIO.parse(fasta_file, "fasta")}
+    return ret_dict
+
+def read_paf(params, should_filter_paf=True):
     """ Reads the PAF file from minimap.  If should_filter_paf=True,
     filters the file according to Ali's specs.
     The returned list has three values.
     The zerotih value is read0, first value is read1
     and the third value is that quality of their mapping.
     See minimap for more info on quality rating.
+
+    TODO this function could be cleaned up
     """
 
-    def pass_filters(row):
+    prefix = params['prefix']
+    fasta_filename = params['fasta_filename']
+    min_matching_length = params['min_matching_length']
+    minimap_call = params['minimap_call']
+    paf_filename = params['paf_filename']
+
+    def pass_minimap_filter(row):
         """returns True if the row passes Ali's filters, False otherwise.
         From filename of previous file:
         all_hg004.mapq200.alen3000.ovtol500
@@ -28,7 +57,6 @@ def read_paf(prefix, fasta_filename, min_matching_length, should_filter_paf=True
         alen_cutoff = 3000
         ov_tol = 500
 
-        kept = False
         qname, ql, qs, qe, strand, tname, tl, ts, te, _, alen, mapq = row[0:12]
         qs, qe, ql = int(qs), int(qe), int(ql)
         ts, te, tl = int(ts), int(te), int(tl)
@@ -36,23 +64,25 @@ def read_paf(prefix, fasta_filename, min_matching_length, should_filter_paf=True
         alen = int(alen)
         ov = overlap.overlap(qname, tname, mapq, -1, "+", qs, qe, ql, strand, ts, te, tl)
         if mapq > map_cutoff and alen > alen_cutoff and ov.hasFullOverlap(ov_tol):
-            kept = True
-        else:
-            pass
-        return kept
+            return True
+        return False
 
-    paf_filename = temp_dir + "/tmp_" + prefix + ".paf"
-    # TODO: allow someone to pass a filepath for minimap.
-    minimap_command = "./minimap -Sw5 -L{} -m0 {} {} > {}"\
-                      .format(min_matching_length, fasta_filename, fasta_filename, paf_filename)
+    minimap_command = "{} -Sw5 -L{} -m0 {} {} > {}"\
+                      .format(minimap_call,
+                              min_matching_length,
+                              fasta_filename,
+                              fasta_filename,
+                              paf_filename
+                      )
 
     os.system(minimap_command)
+
     # populate alignedreads by reading in paf (filter if neccessary)
     alignedreads = []
     with open(paf_filename) as fin:
         for line in fin:
             row = line.strip().split()
-            if not should_filter_paf or pass_filters(row):
+            if not should_filter_paf or pass_minimap_filter(row):
                 alignedreads.append([row[0], row[5], int(row[10])])
     return alignedreads
 
@@ -97,11 +127,6 @@ def read_paths(filename):
     read_paths reads in the paths, transforms each path into a networkx graph,
     and returns a list of the graphs.
     """
-    def pairwise(iterable):
-        "s -> (s0,s1), (s1,s2), (s2, s3), ..."
-        a, b = tee(iterable)
-        next(b, None)
-        return zip(a, b)
 
     paths = []
     with open(filename) as f:
@@ -110,7 +135,7 @@ def read_paths(filename):
             # 92    0.00000e+00 read_43|read_45|read_46|read_71|read_73|read_64|read_96
             path = line.strip().split("\t")[2].split("|")
             path_graph = nx.Graph()
-            for p0, p1 in pairwise(path):
+            for p0, p1 in utils.pairwise(path):
                 path_graph.add_edge(p0, p1)
             paths.append(path_graph)
     return paths[1:]

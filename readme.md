@@ -12,6 +12,8 @@
 
 ## Usage
 
+Install align: github.com/aled1027/align
+
 The basic pipeline may be ran with the follow command. 
 
 ```

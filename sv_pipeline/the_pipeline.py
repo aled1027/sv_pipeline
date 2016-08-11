@@ -287,8 +287,10 @@ def make_four_pdf(args):
 
     assert(len(node_colors) == nx.number_of_nodes(graph))
     title = "Chr {0}; L={1}; Ground Truth Colors\n\
-            Red=Preset, Yellow=Postset, Blue=GapSet, Green=SpanSet"\
-            .format(prefix, min_matching_length)
+            Red=Preset, Yellow=Postset, Blue=GapSet, Green=SpanSet\n\
+            num_edges = {2}\
+            "\
+            .format(prefix, min_matching_length, nx.number_of_edges(graph))
     nx.draw_spring(graph, node_color=node_colors, node_size=100)
     #nx.draw(graph, node_color=node_colors, node_size=100, pos=pos)
     plt.title(title)
@@ -309,8 +311,9 @@ def make_four_pdf(args):
     node_colors = node_set_colors(graph.nodes(), spanset, gapset, preset, postset)
     assert(len(node_colors) == nx.number_of_nodes(graph))
     title = "Chr {0}; L={1}; Ground Truth Colors \n\
-            Removed Preset and Postsetnodes; Blue=GapSet, Green=SpanSet"\
-            .format(prefix, min_matching_length)
+            Removed Preset and Postsetnodes; Blue=GapSet, Green=SpanSet\n\
+            number of edges = {2}"\
+            .format(prefix, min_matching_length, nx.number_of_edges(graph))
     nx.draw_spring(graph, node_color=node_colors, node_size=100)
     #nx.draw(graph, node_color=node_colors, node_size=100, pos=pos)
     plt.title(title)
@@ -322,10 +325,12 @@ def make_four_pdf(args):
     node_colors = node_community_colors(graph, communities)
     assert(len(node_colors) == nx.number_of_nodes(graph))
     title = "Chr {0}; L={1}; After Removing Small Communities; NumCom={2}\n\
-            ComQual={3}, MapQual={4}"\
-            .format(prefix, min_matching_length, len(communities),\
-                    community_quality(communities, spanset, gapset),\
-                    mapping_quality(graph, spanset, gapset))
+            ComQual={3}, MapQual={4}\n\
+            number of edges = {5}"\
+            .format(prefix, min_matching_length, len(communities),
+                    community_quality(communities, spanset, gapset),
+                    mapping_quality(graph, spanset, gapset),
+                    nx.number_of_edges(graph))
     #nx.draw(graph, node_color=node_colors, node_size=100, pos=pos)
     nx.draw_spring(graph, node_color=node_colors, node_size=100)
     plt.title(title)

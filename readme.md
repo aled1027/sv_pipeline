@@ -1,13 +1,6 @@
 # Structual Variant Pipeline
 
 ## TODO
-- get sample data in repo so that I can test things on my laptop
-- test new thread-safe write on some data.
-    - multiprocessing write to file:
-        - when using subprocessing.Pool.map, simply return whatever should be return from the worker subprocess thread.
-        - then write the data to file in the main thread. 
-- add in smith waterman
-- remove support for "*merged.txt" in get_read_classifications
 
 
 ## Usage

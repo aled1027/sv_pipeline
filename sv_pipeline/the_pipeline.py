@@ -6,13 +6,15 @@
 from __future__ import with_statement, print_function, generators
 import collections
 import glob
+import itertools
 from multiprocessing import Pool
 import os
 import time
 import warnings
+import pdb
 
 import matplotlib.pyplot as plt
-from pylab import rcParams
+import pylab as plb
 import numpy as np
 import networkx as nx
 
@@ -54,11 +56,11 @@ def smith_waterman_filter(graph, params):
                     'target_end': target_end,
             }
 
-    print("starting for loop")
-    edges_to_remove = []
-    scores = []
-    num_bad_scores = 0
+    # Generate scores dictionary
+    scores = {}
     num_good_scores = 0
+    num_bad_scores = 0
+    edges_to_remove = []
     for query, target in nx.edges(graph):
 
         # 1. Get overlap info from the paf dictionary
@@ -82,39 +84,70 @@ def smith_waterman_filter(graph, params):
 
         # 2. Align the sequences using the rolling method
         bad_score = False
-        step_size = 2000
         min_len = min(len(query_seq), len(target_seq))
-        for start, end in utils.pairwise(range(0, min_len, step_size)):
+
+        # This for loop is slow
+        # Loop over windows of the subsequence and align
+        window_size = params['window_size']
+        # generate scores dictionary
+        cur_scores = []
+
+        for start, end in utils.pairwise(range(0, min_len, window_size)):
             qs = query_seq[start:end]
             ts = target_seq[start:end]
             score = smith_waterman.smith_waterman(qs, ts)
+            cur_scores.append(score)
 
-            # 3. Delete edge if score is too bad
-            scores.append(score)
+        scores[str(query + target)] = cur_scores
 
-            if score > score_threshold:
-                bad_score = True
-                break
-
-        # Do something based on the scores
-        if bad_score:
-            edges_to_remove.append((query, target))
+        # analyze scores
+        min_score = min(cur_scores)
+        if min_score < score_threshold:
             num_bad_scores += 1
+            edges_to_remove.append((query, target))
         else:
             num_good_scores += 1
 
-    # remove bad edges
+    # remove edges and isolated nodes
     graph.remove_edges_from(edges_to_remove)
-
-    # remove isolated nodes
     isolates = list(nx.isolates(graph))
     graph.remove_nodes_from(isolates)
 
     # the histogram of the data
-    plt.hist(scores)
+    all_scores = list(utils.flatten(list(scores.values())))
+    plt.hist(all_scores)
     plt.title("histogram of num_gaps / len(aligned_sequence)\n{} bad_scores {} good_scores\nthreshold = {}"
               .format(num_bad_scores, num_good_scores, score_threshold))
     return graph
+
+    ### PLOTTING STUFF ###
+    #max_list_size = max(len(x) for x in scores.values())
+    #matrix = np.zeros((len(scores), 2 * max_list_size))
+    #prefix = params['prefix']
+    #for i, (query_target_pair, scores_list) in enumerate(scores.items()):
+    #    matrix[i, :len(scores_list)] = np.array(sorted(scores_list))
+    #plt.clf()
+    #plt.matshow(matrix, cmap='cubehelix')
+    #plt.title(prefix + "matrix")
+    #plt.colorbar()
+    #plt.savefig('figs/' + prefix +  '_matrix.pdf')
+
+    #plt.clf()
+    #stds = []
+    #for i, (query_target_pair, scores_list) in enumerate(scores.items()):
+    #    stds.append(np.array(scores_list).std())
+    #plt.hist(stds)
+    #plt.savefig('figs/' + prefix +  '_std.pdf')
+
+    ## Why is it now plotting like I want it to?
+    #plt.clf()
+    #data = np.array([np.array(d) for d in list(scores.values())])
+    #data = sorted(data, key=lambda x: x.mean())
+    #plb.boxplot(data, whis='range', showbox=False, showmeans=True)
+    #plt.savefig('figs/' + prefix +  '_box.pdf')
+    ### END PLOTTING STUFF ###
+
+
 
 def node_community_colors(graph, communities):
     """runs a community detection algorithm on graph and
@@ -248,6 +281,7 @@ def make_four_params(args):
         'fasta_filename': fasta_filename,
         'paf_filename': temp_dir + "/tmp_" + prefix + ".paf",
         'gap_score_threshold': 0.12,
+        'window_size': 500
     }
     return params
 
@@ -270,7 +304,7 @@ def make_four_pdf(args):
         )
         return
 
-    rcParams['figure.figsize'] = 30, 30
+    plb.rcParams['figure.figsize'] = 30, 30
     plt.clf()
     plt.figure(1)
 
@@ -359,7 +393,7 @@ def sixteen_graphs(the_dir):
     # TODO change to deprecation warning
     warnings.warn("Does not call sv_pipeline functoins correctly", DeprecationWarning)
 
-    rcParams['figure.figsize'] = 30, 30
+    plb.rcParams['figure.figsize'] = 30, 30
     plt.clf()
     plt.figure(1)
 
@@ -419,15 +453,15 @@ def four_graphs(the_dir, min_matching_length):
     #results = p.map(make_four_pdf, zipped)
 
     # Comment this to make sychronous
-    with utils.Timer("timing this shit"):
-        results = [make_four_pdf(z) for z in zipped]
+    results = [make_four_pdf(z) for z in zipped]
 
     with open('results.txt', 'w') as results_file:
         results_file.write(header + '\n')
         results_file.write('\n'.join(results))
         results_file.write('\n')
 
-    p.close()
+    # TODO uncomment this to make parallel
+    #p.close()
 
     # for testing purposes - only run one instance.
     #for z in zipped:

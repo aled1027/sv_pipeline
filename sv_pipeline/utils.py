@@ -17,6 +17,7 @@ class Timer(object):
         if self.name:
             print('<== [Exiting : %s] ' % self.name, end='')
         print('Elapsed: %s' % (time.time() - self.tstart))
+
 def pairwise(iterable):
         """s -> (s0,s1), (s1,s2), (s2, s3), ...
 
@@ -25,4 +26,11 @@ def pairwise(iterable):
         a, b = itertools.tee(iterable)
         next(b, None)
         return zip(a, b)
+
+def flatten(listOfLists):
+    "Flatten one level of nesting"
+    return itertools.chain.from_iterable(listOfLists)
+
+
+
 

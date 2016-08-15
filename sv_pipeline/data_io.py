@@ -14,6 +14,33 @@ from sv_pipeline import temp_dir
 from sv_pipeline import smith_waterman
 from pprint import pprint
 
+def get_paf_dict(filename):
+    """Generates a dictionary mapping
+    str(read0+read1) to a dictionary of information
+    about their alignent.
+    """
+    paf_dict = {}
+    with open(filename) as fin:
+        for line in fin:
+            row = line.strip().split()
+            query_name, _, query_start, query_end, _,\
+                    target_name, _, target_start, target_end, _, _, _ = row[0:12]
+
+            query_start = int(query_start)
+            query_end = int(query_end)
+            target_start = int(target_start)
+            target_end = int(target_end)
+
+            paf_dict[query_name+target_name] = {
+                    'query_name': query_name,
+                    'query_start': query_start,
+                    'query_end': query_end,
+                    'target_name': target_name,
+                    'target_start': target_start,
+                    'target_end': target_end,
+            }
+    return paf_dict
+
 def get_fasta_dict(filename):
     """Generates a dictionary mapping read name to sequence
 

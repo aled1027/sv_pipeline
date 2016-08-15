@@ -1,6 +1,6 @@
 #!/bin/bash
 
-python run.py four data/ figs/all.pdf --L 600
+python run.py four data/ --out_pdf output_figs/all.pdf --output_prefix output --L 600  --sw_window_size 2000
 
 #rm figs/ambig.pdf
 #python run.py four /data/mtsinai/2016_05_13_GR37_HG002_hapcalls/ambig_calls/ figs/ambig --L 600;

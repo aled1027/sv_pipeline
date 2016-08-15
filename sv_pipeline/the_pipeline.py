@@ -30,40 +30,18 @@ def smith_waterman_filter(graph, params):
     fasta_filename = params['fasta_filename']
     paf_filename = params['paf_filename']
     score_threshold = params['gap_score_threshold']
+    window_size = params['sw_window_size']
     fasta_dict = get_fasta_dict(fasta_filename)
-
-    # Parse PAF into a dictionary
-    paf_dict = {}
-    with open(paf_filename) as fin:
-        for line in fin:
-            row = line.strip().split()
-            query_name, _, query_start, query_end, _,\
-                    target_name, _, target_start, target_end, _, _, _ = row[0:12]
-
-            query_start = int(query_start)
-            query_end = int(query_end)
-            target_start = int(target_start)
-            target_end = int(target_end)
-            query_seq = fasta_dict[query_name][query_start:query_end]
-            target_seq = fasta_dict[target_name][target_start:target_end]
-
-            paf_dict[query_name+target_name] = {
-                    'query_name': query_name,
-                    'query_start': query_start,
-                    'query_end': query_end,
-                    'target_name': target_name,
-                    'target_start': target_start,
-                    'target_end': target_end,
-            }
+    paf_dict = get_paf_dict(paf_filename)
 
     # Generate scores dictionary
     scores = {}
     num_good_scores = 0
     num_bad_scores = 0
-    edges_to_remove = []
+    edges_to_remove = set()
     for query, target in nx.edges(graph):
 
-        # 1. Get overlap info from the paf dictionary
+        # Get overlap info from the paf dictionary
         if str(query + target) in paf_dict:
             # get the info
             overlap_info = paf_dict[query+target]
@@ -82,72 +60,48 @@ def smith_waterman_filter(graph, params):
         query_seq = fasta_dict[query][query_start:query_end]
         target_seq = fasta_dict[target][target_start:target_end]
 
-        # 2. Align the sequences using the rolling method
+        # Align the sequences using the rolling method
         bad_score = False
         min_len = min(len(query_seq), len(target_seq))
 
-        # This for loop is slow
-        # Loop over windows of the subsequence and align
-        window_size = params['window_size']
-        # generate scores dictionary
+        # Get scores for this pair; store in cur_scores
         cur_scores = []
+        if window_size:
+            # Use rolling window
+            for start, end in utils.pairwise(range(0, min_len, window_size)):
+                qs = query_seq[start:end]
+                ts = target_seq[start:end]
+                score = smith_waterman.smith_waterman(qs, ts)
+                cur_scores.append(score)
+        else:
+            # No rolling window
+            score = smith_waterman.smith_waterman(query_seq, target_seq)
+            cur_scores = [score]
 
-        for start, end in utils.pairwise(range(0, min_len, window_size)):
-            qs = query_seq[start:end]
-            ts = target_seq[start:end]
-            score = smith_waterman.smith_waterman(qs, ts)
-            cur_scores.append(score)
-
+        # Save data to scores dictionary
+        # Sometimes the scores dictionary is never used
+        # Other times it's extremely useful for plotting data
         scores[str(query + target)] = cur_scores
 
-        # analyze scores
+        # Analyze scores
         min_score = min(cur_scores)
-        if min_score < score_threshold:
+        if score < score_threshold:
             num_bad_scores += 1
-            edges_to_remove.append((query, target))
+            edges_to_remove.add((query, target))
         else:
             num_good_scores += 1
 
     # remove edges and isolated nodes
-    graph.remove_edges_from(edges_to_remove)
+    graph.remove_edges_from(list(edges_to_remove))
     isolates = list(nx.isolates(graph))
     graph.remove_nodes_from(isolates)
 
     # the histogram of the data
     all_scores = list(utils.flatten(list(scores.values())))
     plt.hist(all_scores)
-    plt.title("histogram of num_gaps / len(aligned_sequence)\n{} bad_scores {} good_scores\nthreshold = {}"
-              .format(num_bad_scores, num_good_scores, score_threshold))
+    plt.title("histogram of num_gaps / len(aligned_sequence)\n{} bad_scores {} good_scores\nthreshold = {}\nwindow_size = {}"
+              .format(num_bad_scores, num_good_scores, score_threshold, window_size))
     return graph
-
-    ### PLOTTING STUFF ###
-    #max_list_size = max(len(x) for x in scores.values())
-    #matrix = np.zeros((len(scores), 2 * max_list_size))
-    #prefix = params['prefix']
-    #for i, (query_target_pair, scores_list) in enumerate(scores.items()):
-    #    matrix[i, :len(scores_list)] = np.array(sorted(scores_list))
-    #plt.clf()
-    #plt.matshow(matrix, cmap='cubehelix')
-    #plt.title(prefix + "matrix")
-    #plt.colorbar()
-    #plt.savefig('figs/' + prefix +  '_matrix.pdf')
-
-    #plt.clf()
-    #stds = []
-    #for i, (query_target_pair, scores_list) in enumerate(scores.items()):
-    #    stds.append(np.array(scores_list).std())
-    #plt.hist(stds)
-    #plt.savefig('figs/' + prefix +  '_std.pdf')
-
-    ## Why is it now plotting like I want it to?
-    #plt.clf()
-    #data = np.array([np.array(d) for d in list(scores.values())])
-    #data = sorted(data, key=lambda x: x.mean())
-    #plb.boxplot(data, whis='range', showbox=False, showmeans=True)
-    #plt.savefig('figs/' + prefix +  '_box.pdf')
-    ### END PLOTTING STUFF ###
-
-
 
 def node_community_colors(graph, communities):
     """runs a community detection algorithm on graph and
@@ -276,12 +230,13 @@ def make_four_params(args):
         'min_matching_length': args[2],
         'minimap_call': './minimap',
         'prefix': prefix,
+        'output_prefix': args[3],
         'm4_filename': m4_filename,
         'bed_filename': bed_filename,
         'fasta_filename': fasta_filename,
         'paf_filename': temp_dir + "/tmp_" + prefix + ".paf",
         'gap_score_threshold': 0.12,
-        'window_size': 500
+        'sw_window_size': args[4],
     }
     return params
 
@@ -294,6 +249,7 @@ def make_four_pdf(args):
     m4_filename = params['m4_filename']
     prefix = params['prefix']
     min_matching_length = params['min_matching_length']
+    output_prefix = params['output_prefix']
 
     # if there are fewer than threshold reads then skip it
     threshold = 25 # threshold before plotting.
@@ -373,7 +329,7 @@ def make_four_pdf(args):
     plt.subplot(2, 3, 5)
     make_line_plot((spanset, gapset, preset, postset), params)
 
-    plt.savefig('figs/%s-communities.pdf' % (prefix))
+    plt.savefig(output_prefix + '_figs/%s-communities.pdf' % (prefix))
 
     ret_string = '%s\t%s\t%d\t%d\t%d\t%d\t%d\t%d\tchr%s_slop5000.png\t%s-communities.pdf' % (
         prefix,
@@ -432,7 +388,7 @@ def sixteen_graphs(the_dir):
         plt.savefig("figs/" + prefix + '-16-communities.pdf')
         plt.clf()
 
-def four_graphs(the_dir, min_matching_length):
+def four_graphs(the_dir, min_matching_length, output_prefix, sw_window_size):
     """
     Generates four graphs for each structural variant in the directory
     formerly
@@ -440,28 +396,21 @@ def four_graphs(the_dir, min_matching_length):
     files = get_files(the_dir)
     print('Looking in directory %s*.m4' % (the_dir))
     print('There are %d files' % (len(files)))
-    the_dirs = [the_dir for _ in files]
-    min_matching_lengths = [min_matching_length for _ in files]
-    zipped = zip(files, the_dirs, min_matching_lengths)
+    zipped = zip(files, itertools.repeat(the_dir), itertools.repeat(min_matching_length),
+            itertools.repeat(output_prefix), itertools.repeat(sw_window_size))
 
     ## print a header to screen: these values will be written at the end of the make_four_pdf()
     ## function for each input.
     header = 'prefix\tchr\tleftbp\trightbp\tdelsize\tnumcommunities\tcommunityquality\tmappingquality'
 
-    # TODO uncomment this to make parallel
-    #p = Pool()
-    #results = p.map(make_four_pdf, zipped)
+    p = Pool()
+    results = p.map(make_four_pdf, zipped)
 
-    # Comment this to make sychronous
-    results = [make_four_pdf(z) for z in zipped]
-
-    with open('results.txt', 'w') as results_file:
+    with open(output_prefix + '_results.txt', 'w') as results_file:
         results_file.write(header + '\n')
         results_file.write('\n'.join(results))
         results_file.write('\n')
-
-    # TODO uncomment this to make parallel
-    #p.close()
+    p.close()
 
     # for testing purposes - only run one instance.
     #for z in zipped:

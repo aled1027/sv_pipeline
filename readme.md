@@ -5,7 +5,6 @@
 
 ## Usage
 
-Install align: github.com/aled1027/align
 
 The basic pipeline may be ran with the follow command. 
 
@@ -30,8 +29,11 @@ The fourth argument, `--L`, is an optional argument specifying the minimum match
 - If running pipeline via `ssh`, login with `ssh -X`
 
 ## Dependencies
-- See requirements.txt for python dependencies
-- Pdftk
+- numpy, networkx, bipython... the works
+    - see requirements.txt for more info 
+- align: [github.com/aled1027/align](github.com/aled1027/align)
+    - clone the repo and install with `python setup.py develop`
+- pdftk
     - Not necessary, but it combines many pdfs into a single pdf.
     - On debian, install with `sudo apt-get install pdfkt`
 

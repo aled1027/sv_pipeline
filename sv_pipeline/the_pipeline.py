@@ -29,7 +29,7 @@ from sv_pipeline import utils # Timer
 def smith_waterman_filter(graph, params):
     fasta_filename = params['fasta_filename']
     paf_filename = params['paf_filename']
-    score_threshold = params['gap_score_threshold']
+    score_threshold = params['sw_threshold']
     window_size = params['sw_window_size']
     fasta_dict = get_fasta_dict(fasta_filename)
     paf_dict = get_paf_dict(paf_filename)
@@ -235,8 +235,8 @@ def make_four_params(args):
         'bed_filename': bed_filename,
         'fasta_filename': fasta_filename,
         'paf_filename': temp_dir + "/tmp_" + prefix + ".paf",
-        'gap_score_threshold': 0.12,
-        'sw_window_size': args[4],
+        'sw_window_size': args[4], # anna calls this w
+        'sw_threshold': args[5], # anna calls this t
     }
     return params
 
@@ -294,6 +294,7 @@ def make_four_pdf(args):
 
     # filter nodes by smith_waterman
     with utils.Timer("smith_waterman_filter"):
+
         graph = smith_waterman_filter(graph, params)
 
     # Draw groudn truth with squashed nodes
@@ -388,7 +389,7 @@ def sixteen_graphs(the_dir):
         plt.savefig("figs/" + prefix + '-16-communities.pdf')
         plt.clf()
 
-def four_graphs(the_dir, min_matching_length, output_prefix, sw_window_size):
+def four_graphs(the_dir, min_matching_length, output_prefix, sw_window_size, sw_threshold):
     """
     Generates four graphs for each structural variant in the directory
     formerly
@@ -396,21 +397,32 @@ def four_graphs(the_dir, min_matching_length, output_prefix, sw_window_size):
     files = get_files(the_dir)
     print('Looking in directory %s*.m4' % (the_dir))
     print('There are %d files' % (len(files)))
-    zipped = zip(files, itertools.repeat(the_dir), itertools.repeat(min_matching_length),
-            itertools.repeat(output_prefix), itertools.repeat(sw_window_size))
+    zipped = zip(files,
+                 itertools.repeat(the_dir),
+                 itertools.repeat(min_matching_length),
+                 itertools.repeat(output_prefix),
+                 itertools.repeat(sw_window_size),
+                 itertools.repeat(sw_threshold)
+            )
 
-    ## print a header to screen: these values will be written at the end of the make_four_pdf()
-    ## function for each input.
+
+    with Pool() as p:
+        results = p.map(make_four_pdf, zipped)
+
+    #results = []
+    #for z in zipped:
+    #    out = make_four_pdf(z)
+    #    results.append(out)
+    #    break
+
+    # print a header to screen: these values will be written at the end of the make_four_pdf()
+    # function for each input.
     header = 'prefix\tchr\tleftbp\trightbp\tdelsize\tnumcommunities\tcommunityquality\tmappingquality'
-
-    p = Pool()
-    results = p.map(make_four_pdf, zipped)
-
     with open(output_prefix + '_results.txt', 'w') as results_file:
         results_file.write(header + '\n')
         results_file.write('\n'.join(results))
         results_file.write('\n')
-    p.close()
+
 
     # for testing purposes - only run one instance.
     #for z in zipped:

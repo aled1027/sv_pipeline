@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SW_WINDOW_SIZE=2000
+SW_WINDOW_SIZE=1000
 L=600
 
 python run.py four data/ --out_pdf output_figs/all.pdf --output_prefix output --L $L  --sw_window_size $SW_WINDOW_SIZE

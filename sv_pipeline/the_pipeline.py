@@ -62,13 +62,14 @@ def compute_sw_threshold(flanking_reads, paf_dict, fasta_dict, window_size):
                 ts = target_seq[start:end]
                 score = smith_waterman.smith_waterman(qs, ts)
                 cur_scores.append(score)
+
+            if cur_scores:
+                score = max(cur_scores)
+                max_scores.append(score)
         else:
             # No rolling window
             score = smith_waterman.smith_waterman(query_seq, target_seq)
-            cur_scores = [score]
-
-        max_score = max(cur_scores)
-        max_scores.append(max_score)
+            max_scores.append(score)
 
     threshold = 0.9 * max(max_scores)
 
@@ -147,10 +148,10 @@ def smith_waterman_filter(graph, flanking_reads, params):
         # Analyze scores
         score = max(cur_scores)
         if score < score_threshold:
+            num_good_scores += 1
+        else:
             num_bad_scores += 1
             edges_to_remove.add((query, target))
-        else:
-            num_good_scores += 1
 
     # remove edges and isolated nodes
     graph.remove_edges_from(list(edges_to_remove))
@@ -467,15 +468,15 @@ def four_graphs(the_dir, min_matching_length, output_prefix, sw_window_size):
 
 
     # For multiprocessing
-    #with Pool() as p:
-    #    results = p.map(make_four_pdf, zipped)
+    with Pool() as p:
+        results = p.map(make_four_pdf, zipped)
 
     # For syncronous
-    results = []
-    for z in zipped:
-        out = make_four_pdf(z)
-        results.append(out)
-        break
+    #results = []
+    #for z in zipped:
+    #    out = make_four_pdf(z)
+    #    results.append(out)
+    #    break
 
     # print a header to screen: these values will be written at the end of the make_four_pdf()
     # function for each input.

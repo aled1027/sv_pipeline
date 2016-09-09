@@ -70,9 +70,17 @@ def compute_sw_threshold(flanking_reads, paf_dict, fasta_dict, window_size):
         max_score = max(cur_scores)
         max_scores.append(max_score)
 
-    threshold = np.mean(max_scores)
+    threshold = 0.9 * max(max_scores)
 
     print("using {} as threshold".format(threshold))
+
+    plt.subplot(2, 3, 2)
+    plt.hist(max_scores)
+    plt.title("FLANKING READS\nhistogram of num_gaps / len(aligned_sequence)\nthreshold = {}\nwindow_size = {}\nshowing {} scores"
+              .format(threshold, window_size, len(max_scores)))
+
+
+
     return threshold
 
 
@@ -81,7 +89,6 @@ def smith_waterman_filter(graph, flanking_reads, params):
 
     fasta_filename = params['fasta_filename']
     paf_filename = params['paf_filename']
-    score_threshold = params['sw_threshold'] # TODO remove
     window_size = params['sw_window_size']
     fasta_dict = get_fasta_dict(fasta_filename)
     paf_dict = get_paf_dict(paf_filename)
@@ -138,7 +145,7 @@ def smith_waterman_filter(graph, flanking_reads, params):
         scores[str(query + target)] = cur_scores
 
         # Analyze scores
-        min_score = min(cur_scores)
+        score = max(cur_scores)
         if score < score_threshold:
             num_bad_scores += 1
             edges_to_remove.add((query, target))
@@ -151,6 +158,7 @@ def smith_waterman_filter(graph, flanking_reads, params):
     graph.remove_nodes_from(isolates)
 
     # the histogram of the data
+    plt.subplot(2, 3, 3)
     all_scores = list(utils.flatten(list(scores.values())))
     plt.hist(all_scores)
     plt.title("histogram of num_gaps / len(aligned_sequence)\n{} bad_scores {} good_scores\nthreshold = {}\nwindow_size = {}"
@@ -290,7 +298,6 @@ def make_four_params(args):
         'fasta_filename': fasta_filename,
         'paf_filename': temp_dir + "/tmp_" + prefix + ".paf",
         'sw_window_size': args[4], # anna calls this w
-        'sw_threshold': args[5], # anna calls this t
     }
     return params
 
@@ -340,7 +347,6 @@ def make_four_pdf(args):
     plt.title(title)
 
     # Draw histogram of smith waterman scores and remove bad edges
-    plt.subplot(2, 3, 2)
 
     # squash preset and postset nodes
     graph = nx_helpers.remove_nodes(graph, preset)
@@ -349,10 +355,11 @@ def make_four_pdf(args):
     # filter nodes by smith_waterman
     with utils.Timer("smith_waterman_filter"):
         flanking_reads = preset.union(postset)
+        # subplots 2 and 3 occur in smith_waterman_filter
         graph = smith_waterman_filter(graph, flanking_reads, params)
 
     # Draw groudn truth with squashed nodes
-    plt.subplot(2, 3, 3)
+    plt.subplot(2, 3, 4)
     node_colors = node_set_colors(graph.nodes(), spanset, gapset, preset, postset)
     assert(len(node_colors) == nx.number_of_nodes(graph))
     title = "Chr {0}; L={1}; Ground Truth Colors \n\
@@ -364,7 +371,7 @@ def make_four_pdf(args):
     plt.title(title)
 
     # Drop Small Communities and Draw
-    plt.subplot(2, 3, 4)
+    plt.subplot(2, 3, 5)
     communities = nx_helpers.get_communities(graph)
     graph, communities = drop_small_communities(graph, communities)
     node_colors = node_community_colors(graph, communities)
@@ -381,7 +388,7 @@ def make_four_pdf(args):
     plt.title(title)
 
     # IGV Line Plot
-    plt.subplot(2, 3, 5)
+    plt.subplot(2, 3, 6)
     make_line_plot((spanset, gapset, preset, postset), params)
 
     plt.savefig(output_prefix + '_figs/%s-communities.pdf' % (prefix))
@@ -443,7 +450,7 @@ def sixteen_graphs(the_dir):
         plt.savefig("figs/" + prefix + '-16-communities.pdf')
         plt.clf()
 
-def four_graphs(the_dir, min_matching_length, output_prefix, sw_window_size, sw_threshold):
+def four_graphs(the_dir, min_matching_length, output_prefix, sw_window_size):
     """
     Generates four graphs for each structural variant in the directory
     formerly
@@ -455,8 +462,7 @@ def four_graphs(the_dir, min_matching_length, output_prefix, sw_window_size, sw_
                  itertools.repeat(the_dir),
                  itertools.repeat(min_matching_length),
                  itertools.repeat(output_prefix),
-                 itertools.repeat(sw_window_size),
-                 itertools.repeat(sw_threshold)
+                 itertools.repeat(sw_window_size)
             )
 
 

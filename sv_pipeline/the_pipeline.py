@@ -26,13 +26,67 @@ from sv_pipeline import utils # Timer
 ## Download the compressed file from this site and extract it:
 #https://xritza01.u.hpc.mssm.edu/trios/2016-05-12-data-for-networks/GR38/NA19240/dels/
 
-def smith_waterman_filter(graph, params):
+def compute_sw_threshold(flanking_reads, paf_dict, fasta_dict, window_size):
+    """Finds the max gap_score of the flanking reads.
+    We use this value as the threshold for smith
+    waterman filtering.
+    """
+
+    max_scores = []
+    for query, target in itertools.product(flanking_reads, flanking_reads):
+
+        if str(query + target) in paf_dict:
+            overlap_info = paf_dict[query+target]
+        elif str(target + query) in paf_dict:
+            # get info and swap them
+            overlap_info = paf_dict[target+query]
+            query, target = target, query
+        else:
+            continue
+
+        query_start = overlap_info['query_start']
+        query_end = overlap_info['query_end']
+        target_start = overlap_info['target_start']
+        target_end = overlap_info['target_end']
+
+        query_seq = fasta_dict[query][query_start:query_end]
+        target_seq = fasta_dict[target][target_start:target_end]
+
+        # Get scores for this pair; store in cur_scores
+        cur_scores = []
+        if window_size:
+            # Use rolling window
+            min_len = min(len(query_seq), len(target_seq))
+            for start, end in utils.pairwise(range(0, min_len, window_size)):
+                qs = query_seq[start:end]
+                ts = target_seq[start:end]
+                score = smith_waterman.smith_waterman(qs, ts)
+                cur_scores.append(score)
+        else:
+            # No rolling window
+            score = smith_waterman.smith_waterman(query_seq, target_seq)
+            cur_scores = [score]
+
+        max_score = max(cur_scores)
+        max_scores.append(max_score)
+
+    threshold = np.mean(max_scores)
+
+    print("using {} as threshold".format(threshold))
+    return threshold
+
+
+
+def smith_waterman_filter(graph, flanking_reads, params):
+
     fasta_filename = params['fasta_filename']
     paf_filename = params['paf_filename']
-    score_threshold = params['sw_threshold']
+    score_threshold = params['sw_threshold'] # TODO remove
     window_size = params['sw_window_size']
     fasta_dict = get_fasta_dict(fasta_filename)
     paf_dict = get_paf_dict(paf_filename)
+
+    score_threshold = compute_sw_threshold(flanking_reads, paf_dict, fasta_dict, window_size)
 
     # Generate scores dictionary
     scores = {}
@@ -294,8 +348,8 @@ def make_four_pdf(args):
 
     # filter nodes by smith_waterman
     with utils.Timer("smith_waterman_filter"):
-
-        graph = smith_waterman_filter(graph, params)
+        flanking_reads = preset.union(postset)
+        graph = smith_waterman_filter(graph, flanking_reads, params)
 
     # Draw groudn truth with squashed nodes
     plt.subplot(2, 3, 3)
@@ -406,14 +460,16 @@ def four_graphs(the_dir, min_matching_length, output_prefix, sw_window_size, sw_
             )
 
 
-    with Pool() as p:
-        results = p.map(make_four_pdf, zipped)
+    # For multiprocessing
+    #with Pool() as p:
+    #    results = p.map(make_four_pdf, zipped)
 
-    #results = []
-    #for z in zipped:
-    #    out = make_four_pdf(z)
-    #    results.append(out)
-    #    break
+    # For syncronous
+    results = []
+    for z in zipped:
+        out = make_four_pdf(z)
+        results.append(out)
+        break
 
     # print a header to screen: these values will be written at the end of the make_four_pdf()
     # function for each input.

@@ -1,7 +1,11 @@
 # Structual Variant Pipeline
 
+- computed 0.23
+- computed 0.13
+
 ## TODO
 - add adaptable background rate for smith waterman filtering
+
 
 ## Usage
 
